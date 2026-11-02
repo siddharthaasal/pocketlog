@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo } from 'react'
 import { accountBalances } from '../domain/balances'
-import type { Account, Category, Transaction } from '../domain/types'
+import type { Account, Category, InboxEntry, Transaction } from '../domain/types'
 import { monthBounds } from '../lib/dates'
 import { db } from './db'
 
@@ -70,5 +70,21 @@ export function useBalances(): Map<string, number> | undefined {
   return useMemo(
     () => (accounts && transactions ? accountBalances(accounts, transactions) : undefined),
     [accounts, transactions],
+  )
+}
+
+/** Transactions waiting for a person to confirm, newest first. */
+export function useReviewQueue(): Transaction[] | undefined {
+  return useLiveQuery(async () =>
+    (await db.transactions.toArray()).filter((t) => t.needsReview && !t.deletedAt).sort(byNewest),
+  )
+}
+
+/** Siri lines the parser couldn't turn into a transaction. */
+export function useUnparsedInbox(): InboxEntry[] | undefined {
+  return useLiveQuery(async () =>
+    (await db.inbox.toArray())
+      .filter((e) => e.status === 'unparsed')
+      .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt)),
   )
 }

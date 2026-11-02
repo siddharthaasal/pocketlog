@@ -67,3 +67,10 @@ export const ChartIcon = (p: IconProps) => (
     <path d="M7 16v-5M12 16V7M17 16v-8" />
   </Icon>
 )
+
+export const MicIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="9" y="3" width="6" height="11" rx="3" />
+    <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+  </Icon>
+)

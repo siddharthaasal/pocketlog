@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import { Link } from 'wouter'
-import { ChevronRightIcon } from '../../components/icons'
+import { ChevronRightIcon, MicIcon } from '../../components/icons'
 import { Card, CategoryBadge, EmptyState, Loading, Money, SectionTitle } from '../../components/ui'
 import { cx } from '../../lib/cx'
-import { useBalances, useLookups, useTransactionsInMonth } from '../../data/hooks'
+import { useBalances, useLookups, useReviewQueue, useTransactionsInMonth } from '../../data/hooks'
 import { totalBalance } from '../../domain/balances'
 import { summarize } from '../../domain/summary'
 import { formatMonth } from '../../lib/dates'
@@ -16,6 +16,7 @@ export function DashboardPage() {
   const transactions = useTransactionsInMonth(month)
   const lookups = useLookups()
   const balances = useBalances()
+  const review = useReviewQueue()
   const summary = useMemo(() => summarize(transactions ?? []), [transactions])
 
   return (
@@ -38,6 +39,22 @@ export function DashboardPage() {
               <Stat label="Net" paise={summary.net} negative={summary.net < 0} />
             </div>
           </Card>
+
+          <Link
+            href="/inbox"
+            className="flex items-center gap-3 rounded-2xl bg-surface px-5 py-3.5 hover:bg-surface-2/60"
+          >
+            <MicIcon width={18} height={18} className="text-accent" />
+            <span className="flex-1 text-[15px]">
+              {review && review.length > 0 ? 'Siri entries to review' : 'Import Siri entries'}
+            </span>
+            {review && review.length > 0 && (
+              <span className="rounded-full bg-accent px-2 py-0.5 text-[13px] font-medium text-accent-fg tabular-nums">
+                {review.length}
+              </span>
+            )}
+            <ChevronRightIcon width={18} height={18} className="text-muted" />
+          </Link>
 
           {balances && (
             <Link

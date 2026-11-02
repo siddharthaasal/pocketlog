@@ -112,21 +112,21 @@ Vercel: default Standard Protection covers preview deployments. Production is pu
 
 **Constraint:** a Shortcut cannot write to the PWA's IndexedDB, and Home Screen web apps have storage separate from Safari, so opening a URL can't reach it either.
 
-**Flow:**
+**Flow (as built):**
 
-1. "Hey Siri, log expense" → runs the _Log Expense_ Shortcut.
-2. Shortcut dictates text, strips newlines, and appends a line to `PocketLog/inbox.txt`:
-   `2026-11-02T13:45:10+05:30<TAB>Spent 350 on lunch using HDFC`
-3. Shortcut extracts the first number with a regex and speaks "Saved 350 — lunch." (No confirmation dialog; review happens in the app.)
-4. In the app, the Inbox screen → **Import** → pick `inbox.txt` (Files picker). Each line is parsed with the same parser as the in-app quick-add box, using the line's timestamp as "today" for relative dates. Already-imported lines are skipped by hash, so re-importing the same growing file is safe.
-5. Confident parses are saved directly; uncertain ones (missing amount, unknown account, ambiguous type) land in a review queue.
-6. A second Shortcut, _Clear Expense Inbox_, truncates the file when you want.
+1. "Hey Siri, log expense" → runs the _Log expense_ Shortcut (setup steps are on the app's Siri inbox screen).
+2. The Shortcut dictates text and appends one line to `PocketLog/inbox.txt` in the Shortcuts folder of iCloud Drive: `2026-11-02T13:45:10+05:30 Spent 350 on lunch using HDFC`. Timestamp, a space, the dictated text; a space is easier to type in Shortcuts than a tab.
+3. Siri reads back "Saved: …". No confirmation dialog; review happens in the app.
+4. In the app: Siri inbox → **Import inbox file** → pick `inbox.txt`. Each line is parsed with the same parser as the Add form's quick-entry box, with the line's date as "today" for relative dates.
+5. Every line is remembered by its SHA-256 hash, so re-importing the same growing file only adds new lines. The transaction id is derived from that hash (`siri-<hash>`), so a line imported on both iPhone and Mac merges as one record in Phase 4.
+6. Confident parses are saved. Uncertain ones (guessed category, several amounts) are saved with `needsReview` and listed under **To review**. Lines without an amount or transfer accounts are kept under **Couldn't understand**, with **Add manually** (prefills the form) or **Dismiss**.
+7. Clearing the file is manual (delete it in Files); PocketLog already remembers what it imported, so no second Shortcut is needed.
 
-The same Shortcut works on the Mac (Shortcuts app + Siri).
+The same Shortcut works on the Mac, and because the file is in iCloud Drive it appears on both devices. Privacy trade-off: Apple can read iCloud Drive unless Advanced Data Protection is on. This is stated on the setup screen.
 
-**To verify on device in Phase 3** (not assuming): `Append to Text File` writing to _On My iPhone_; Siri running the Shortcut from the lock screen; Files picker reading the file from the installed PWA.
+**Still to verify on the iPhone:** `Append to Text File` creating the file on first run; Siri running the Shortcut from the lock screen; the installed PWA's Files picker opening `inbox.txt`.
 
-**Parser** (`src/parser`, deterministic, no LLM): amount (`350`, `₹350`, `rs 1,200`, `1.5k`), type keywords (spent/paid/bought → expense; received/got/earned → income; transferred/moved/withdrew → transfer), accounts via aliases + "using/with/via/from/on", "from X to Y" for transfers, dates (today, yesterday, day before yesterday, weekday names, "on 5th", "5 Nov"), category via keyword map, description = leftover words cleaned up. Returns `{ draft, confidence, issues[] }`. Backed by a test corpus of phrasings.
+**Parser** (`src/parser`, deterministic, no LLM, 43 tests): amounts (`350`, `₹350`, `Rs. 1,200`, `1.5k`, `2 thousand`, `1 lakh`, prefers the number marked as currency), type words (spent/paid/bought; received/earned/credited, salary/refund hints, "got" only when nothing points to spending; transferred/moved/withdrew), account aliases (longest match first) with "from X to Y" for transfers, "withdrew" → bank to Cash, "paid credit card bill" → transfer to the card, UPI/GPay/Google Pay as payment method, dates (today, yesterday, day before yesterday, N days ago, weekdays, "on the 5th", "28 October", "15/10"), categories from the user's editable keywords, description from the leftover words. Returns `{ fields, issues[], input | null }`.
 
 ## 8. Backup & manual sync
 
