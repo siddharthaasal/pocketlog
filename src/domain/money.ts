@@ -37,3 +37,23 @@ export function formatINR(paise: number): string {
   const formatter = paise % 100 === 0 ? wholeFormatter : fractionFormatter
   return formatter.format(paise / 100)
 }
+
+const compactFormatter = new Intl.NumberFormat('en-IN', {
+  style: 'currency',
+  currency: 'INR',
+  notation: 'compact',
+  maximumFractionDigits: 1,
+})
+
+/** Short form for chart axes: 1200000 paise → "₹12K", 12500000_00 → "₹12.5L". */
+export function formatINRCompact(paise: number): string {
+  return compactFormatter.format(Math.round(paise / 100))
+}
+
+/** A round axis maximum at or above `value` (in paise), from 1–10 × a power of ten. */
+export function niceCeiling(value: number): number {
+  if (value <= 0) return 0
+  const magnitude = 10 ** Math.floor(Math.log10(value))
+  const step = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((s) => s * magnitude >= value) ?? 10
+  return step * magnitude
+}

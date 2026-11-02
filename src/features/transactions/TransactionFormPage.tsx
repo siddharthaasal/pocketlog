@@ -29,23 +29,41 @@ import {
   type PaymentMethod,
   type Transaction,
   type TransactionInput,
+  type TransactionType,
 } from '../../domain/types'
 import { todayISO } from '../../lib/dates'
 import { goBack } from '../../lib/navigation'
 
-type EntryType = 'expense' | 'income'
-
 const TYPE_OPTIONS = [
   { value: 'expense', label: 'Expense' },
   { value: 'income', label: 'Income' },
+  { value: 'transfer', label: 'Transfer' },
 ] as const
 
+const DESCRIPTION_PLACEHOLDERS: Record<TransactionType, string> = {
+  expense: 'Lunch with team',
+  income: 'November salary',
+  transfer: 'ATM withdrawal',
+}
+
+/** A sensible destination for a transfer: Cash if it isn't the source, else any other active account. */
+function pickTransferTarget(accounts: readonly Account[], fromId: string): string {
+  const others = accounts.filter((a) => !a.archived && a.id !== fromId)
+  return (others.find((a) => a.type === 'cash') ?? others[0])?.id ?? ''
+}
+
+function parseType(value: string | null): TransactionType {
+  return value === 'income' || value === 'transfer' ? value : 'expense'
+}
+
 interface FormState {
-  type: EntryType
+  type: TransactionType
   amount: string
   description: string
   categoryId: string
   accountId: string
+  /** Transfers only. */
+  toAccountId: string
   date: string
   merchant: string
   paymentMethod: PaymentMethod | ''
@@ -80,27 +98,18 @@ export function TransactionFormPage() {
 
   const initial: FormState = existing
     ? {
-        type: existing.type === 'income' ? 'income' : 'expense',
+        type: existing.type,
         amount: paiseToInput(existing.amount),
         description: existing.description,
         categoryId: existing.categoryId ?? '',
         accountId: existing.accountId,
+        toAccountId: existing.toAccountId ?? '',
         date: existing.date,
         merchant: existing.merchant ?? '',
         paymentMethod: existing.paymentMethod ?? '',
         notes: existing.notes ?? '',
       }
-    : {
-        type: params.get('type') === 'income' ? 'income' : 'expense',
-        amount: '',
-        description: '',
-        categoryId: '',
-        accountId: pickDefaultAccount(accounts)?.id ?? '',
-        date: todayISO(),
-        merchant: '',
-        paymentMethod: '',
-        notes: '',
-      }
+    : newFormState(parseType(params.get('type')), accounts)
 
   return (
     <>
@@ -114,6 +123,22 @@ export function TransactionFormPage() {
       />
     </>
   )
+}
+
+function newFormState(type: TransactionType, accounts: readonly Account[]): FormState {
+  const accountId = pickDefaultAccount(accounts)?.id ?? ''
+  return {
+    type,
+    amount: '',
+    description: '',
+    categoryId: '',
+    accountId,
+    toAccountId: type === 'transfer' ? pickTransferTarget(accounts, accountId) : '',
+    date: todayISO(),
+    merchant: '',
+    paymentMethod: '',
+    notes: '',
+  }
 }
 
 function TransactionForm({
@@ -139,14 +164,22 @@ function TransactionForm({
   const visibleCategories = categories.filter(
     (c) => c.type === form.type && (!c.archived || c.id === initial.categoryId),
   )
-  const visibleAccounts = accounts.filter((a) => !a.archived || a.id === initial.accountId)
+  const visibleAccounts = accounts.filter(
+    (a) => !a.archived || a.id === initial.accountId || a.id === initial.toAccountId,
+  )
+  const isTransfer = form.type === 'transfer'
 
-  function changeType(type: EntryType) {
+  function changeType(type: TransactionType) {
     setForm((f) => ({
       ...f,
       type,
       categoryId: categories.find((c) => c.id === f.categoryId)?.type === type ? f.categoryId : '',
+      toAccountId:
+        type === 'transfer' && (!f.toAccountId || f.toAccountId === f.accountId)
+          ? pickTransferTarget(accounts, f.accountId)
+          : f.toAccountId,
     }))
+    setErrors({})
   }
 
   async function onSubmit(e: FormEvent) {
@@ -160,11 +193,12 @@ function TransactionForm({
       type: form.type,
       amount,
       description: form.description.trim(),
-      categoryId: form.categoryId || undefined,
+      categoryId: isTransfer ? undefined : form.categoryId || undefined,
       accountId: form.accountId,
+      toAccountId: isTransfer ? form.toAccountId || undefined : undefined,
       date: form.date,
       merchant: form.merchant.trim() || undefined,
-      paymentMethod: form.paymentMethod || undefined,
+      paymentMethod: isTransfer ? undefined : form.paymentMethod || undefined,
       notes: form.notes.trim() || undefined,
     }
     setSaving(true)
@@ -207,41 +241,43 @@ function TransactionForm({
         </div>
       </Field>
 
-      <Field label="Category" error={errors.categoryId} group>
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {visibleCategories.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => set('categoryId', c.id)}
-              aria-pressed={form.categoryId === c.id}
-              className={cx(
-                'flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-center text-[12px] leading-tight',
-                form.categoryId === c.id
-                  ? 'border-accent bg-accent/10 text-text'
-                  : 'border-transparent bg-surface text-muted',
-              )}
-            >
-              <span className="text-[20px]" aria-hidden="true">
-                {c.icon}
-              </span>
-              {c.name}
-            </button>
-          ))}
-        </div>
-      </Field>
+      {!isTransfer && (
+        <Field label="Category" error={errors.categoryId} group>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {visibleCategories.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => set('categoryId', c.id)}
+                aria-pressed={form.categoryId === c.id}
+                className={cx(
+                  'flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-center text-[12px] leading-tight',
+                  form.categoryId === c.id
+                    ? 'border-accent bg-accent/10 text-text'
+                    : 'border-transparent bg-surface text-muted',
+                )}
+              >
+                <span className="text-[20px]" aria-hidden="true">
+                  {c.icon}
+                </span>
+                {c.name}
+              </button>
+            ))}
+          </div>
+        </Field>
+      )}
 
       <Field label="Description" error={errors.description}>
         <TextInput
           value={form.description}
           onChange={(e) => set('description', e.target.value)}
-          placeholder={form.type === 'expense' ? 'Lunch with team' : 'November salary'}
+          placeholder={DESCRIPTION_PLACEHOLDERS[form.type]}
           autoCapitalize="sentences"
         />
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Account" error={errors.accountId}>
+        <Field label={isTransfer ? 'From' : 'Account'} error={errors.accountId}>
           <Select value={form.accountId} onChange={(e) => set('accountId', e.target.value)}>
             {visibleAccounts.map((a) => (
               <option key={a.id} value={a.id}>
@@ -250,14 +286,27 @@ function TransactionForm({
             ))}
           </Select>
         </Field>
-        <Field label="Date" error={errors.date}>
-          <TextInput
-            type="date"
-            value={form.date}
-            max="9999-12-31"
-            onChange={(e) => set('date', e.target.value)}
-          />
-        </Field>
+        {isTransfer && (
+          <Field label="To" error={errors.toAccountId}>
+            <Select value={form.toAccountId} onChange={(e) => set('toAccountId', e.target.value)}>
+              {visibleAccounts.map((a) => (
+                <option key={a.id} value={a.id} disabled={a.id === form.accountId}>
+                  {a.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        <div className={isTransfer ? 'col-span-2' : undefined}>
+          <Field label="Date" error={errors.date}>
+            <TextInput
+              type="date"
+              value={form.date}
+              max="9999-12-31"
+              onChange={(e) => set('date', e.target.value)}
+            />
+          </Field>
+        </div>
       </div>
 
       <details open={hasDetails} className="group">
@@ -266,28 +315,30 @@ function TransactionForm({
           <span className="hidden group-open:inline">Fewer details</span>
         </summary>
         <Card className="mt-3 space-y-4 bg-transparent">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Merchant" error={errors.merchant}>
-              <TextInput
-                value={form.merchant}
-                onChange={(e) => set('merchant', e.target.value)}
-                placeholder="Optional"
-              />
-            </Field>
-            <Field label="Paid via">
-              <Select
-                value={form.paymentMethod}
-                onChange={(e) => set('paymentMethod', e.target.value as PaymentMethod | '')}
-              >
-                <option value="">—</option>
-                {PAYMENT_METHODS.map((m) => (
-                  <option key={m} value={m}>
-                    {PAYMENT_METHOD_LABELS[m]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
+          {!isTransfer && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Merchant" error={errors.merchant}>
+                <TextInput
+                  value={form.merchant}
+                  onChange={(e) => set('merchant', e.target.value)}
+                  placeholder="Optional"
+                />
+              </Field>
+              <Field label="Paid via">
+                <Select
+                  value={form.paymentMethod}
+                  onChange={(e) => set('paymentMethod', e.target.value as PaymentMethod | '')}
+                >
+                  <option value="">—</option>
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>
+                      {PAYMENT_METHOD_LABELS[m]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+          )}
           <Field label="Notes" error={errors.notes}>
             <TextArea
               value={form.notes}

@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'wouter'
-import { HomeIcon, ListIcon, PlusIcon, SettingsIcon } from '../components/icons'
+import { ChartIcon, HomeIcon, ListIcon, PlusIcon, SettingsIcon } from '../components/icons'
 import { cx } from '../lib/cx'
 import { UpdatePrompt } from './UpdatePrompt'
 
 const NAV = [
   { href: '/', label: 'Home', icon: HomeIcon },
   { href: '/transactions', label: 'Transactions', icon: ListIcon },
+  { href: '/analytics', label: 'Analytics', icon: ChartIcon },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ] as const
 

@@ -74,6 +74,22 @@ describe('transactions', () => {
     expect(updated.merchant).toBeUndefined()
   })
 
+  it('saves a transfer between two existing accounts', async () => {
+    const t = await addTransaction({
+      type: 'transfer',
+      amount: 1_000_000,
+      description: 'ATM',
+      accountId: 'acc-hdfc',
+      toAccountId: 'acc-cash',
+      date: '2026-11-02',
+    })
+    expect(t).toMatchObject({ type: 'transfer', toAccountId: 'acc-cash' })
+    expect(t.categoryId).toBeUndefined()
+    await expect(
+      addTransaction({ ...lunch, type: 'transfer', categoryId: undefined, toAccountId: 'nope' }),
+    ).rejects.toBeInstanceOf(ValidationError)
+  })
+
   it('soft-deletes so the deletion can sync later', async () => {
     const t = await addTransaction(lunch)
     await deleteTransaction(t.id)

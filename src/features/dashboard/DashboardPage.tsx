@@ -1,48 +1,28 @@
 import { useMemo } from 'react'
-import { Link, useSearchParams } from 'wouter'
-import { ChevronLeftIcon, ChevronRightIcon } from '../../components/icons'
+import { Link } from 'wouter'
+import { ChevronRightIcon } from '../../components/icons'
 import { Card, CategoryBadge, EmptyState, Loading, Money, SectionTitle } from '../../components/ui'
 import { cx } from '../../lib/cx'
-import { useLookups, useTransactionsInMonth } from '../../data/hooks'
+import { useBalances, useLookups, useTransactionsInMonth } from '../../data/hooks'
+import { totalBalance } from '../../domain/balances'
 import { summarize } from '../../domain/summary'
-import { currentMonth, formatMonth, shiftMonth } from '../../lib/dates'
+import { formatMonth } from '../../lib/dates'
+import { MonthSwitcher } from '../shared/MonthSwitcher'
+import { useMonthParam } from '../shared/useMonthParam'
 import { TransactionRow } from '../transactions/TransactionRow'
-
-const MONTH_PATTERN = /^\d{4}-\d{2}$/
-
-function useMonthParam(): [string, (month: string) => void] {
-  const [params, setParams] = useSearchParams()
-  const raw = params.get('month')
-  const month = raw && MONTH_PATTERN.test(raw) ? raw : currentMonth()
-  const setMonth = (next: string) =>
-    setParams(next === currentMonth() ? {} : { month: next }, { replace: true })
-  return [month, setMonth]
-}
 
 export function DashboardPage() {
   const [month, setMonth] = useMonthParam()
   const transactions = useTransactionsInMonth(month)
   const lookups = useLookups()
+  const balances = useBalances()
   const summary = useMemo(() => summarize(transactions ?? []), [transactions])
-  const isCurrent = month === currentMonth()
 
   return (
     <>
-      <header className="mb-5 flex items-center justify-between">
-        <h1 className="text-[28px] font-semibold tracking-tight">{formatMonth(month)}</h1>
-        <div className="flex">
-          <MonthButton label="Previous month" onClick={() => setMonth(shiftMonth(month, -1))}>
-            <ChevronLeftIcon />
-          </MonthButton>
-          <MonthButton
-            label="Next month"
-            disabled={isCurrent}
-            onClick={() => setMonth(shiftMonth(month, 1))}
-          >
-            <ChevronRightIcon />
-          </MonthButton>
-        </div>
-      </header>
+      <div className="mb-5">
+        <MonthSwitcher month={month} onChange={setMonth} />
+      </div>
 
       {!transactions || !lookups ? (
         <Loading />
@@ -58,6 +38,19 @@ export function DashboardPage() {
               <Stat label="Net" paise={summary.net} negative={summary.net < 0} />
             </div>
           </Card>
+
+          {balances && (
+            <Link
+              href="/analytics#accounts"
+              className="flex items-center justify-between rounded-2xl bg-surface px-5 py-3.5 hover:bg-surface-2/60"
+            >
+              <span className="text-[15px] text-muted">Across all accounts</span>
+              <span className="flex items-center gap-1">
+                <Money paise={totalBalance(balances)} className="text-[15px] font-medium" />
+                <ChevronRightIcon width={18} height={18} className="text-muted" />
+              </span>
+            </Link>
+          )}
 
           {transactions.length === 0 ? (
             <EmptyState title={`No transactions in ${formatMonth(month)}.`}>
@@ -139,29 +132,5 @@ function Stat({ label, paise, negative }: { label: string; paise: number; negati
       <div className="text-[13px] text-muted">{label}</div>
       <Money paise={paise} className={cx('text-[17px] font-medium', negative && 'text-negative')} />
     </div>
-  )
-}
-
-function MonthButton({
-  label,
-  disabled,
-  onClick,
-  children,
-}: {
-  label: string
-  disabled?: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
-      className="flex h-11 w-11 items-center justify-center rounded-full text-accent hover:bg-surface-2 disabled:text-muted disabled:opacity-40"
-    >
-      {children}
-    </button>
   )
 }

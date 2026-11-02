@@ -18,7 +18,7 @@ Single-user, local-first expense tracker for iPhone + Mac. Supersedes the open q
 
 ## 2. Stack
 
-React + TypeScript (strict) · Vite · Tailwind CSS · `vite-plugin-pwa` (Workbox service worker, manifest) · Dexie + `dexie-react-hooks` (`useLiveQuery` gives reactive queries, so no state library) · Recharts · Zod (validation of form input and imported JSON) · `wouter` (tiny router) · Vitest · oxlint (the current Vite template default, replacing ESLint) · Prettier.
+React + TypeScript (strict) · Vite · Tailwind CSS · `vite-plugin-pwa` (Workbox service worker, manifest) · Dexie + `dexie-react-hooks` (`useLiveQuery` gives reactive queries, so no state library) · hand-drawn SVG charts (one small column chart didn't justify ~100 KB of Recharts) · Zod (validation of form input and imported JSON) · `wouter` (tiny router) · Vitest · oxlint (the current Vite template default, replacing ESLint) · Prettier.
 
 No date library — dates are stored as local `YYYY-MM-DD` strings and handled with small helpers + `Intl`. IDs via `crypto.randomUUID()`.
 
