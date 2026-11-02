@@ -60,3 +60,10 @@ export const ChevronRightIcon = (p: IconProps) => (
     <path d="m9 18 6-6-6-6" />
   </Icon>
 )
+
+export const ChartIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 20h16" />
+    <path d="M7 16v-5M12 16V7M17 16v-8" />
+  </Icon>
+)

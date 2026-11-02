@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo } from 'react'
+import { accountBalances } from '../domain/balances'
 import type { Account, Category, Transaction } from '../domain/types'
 import { monthBounds } from '../lib/dates'
 import { db } from './db'
@@ -60,4 +61,14 @@ export function useLookups(): Lookups | undefined {
       accounts: new Map(accounts.map((a) => [a.id, a])),
     }
   }, [categories, accounts])
+}
+
+/** Current balance per account id, from every transaction. */
+export function useBalances(): Map<string, number> | undefined {
+  const accounts = useAccounts()
+  const transactions = useAllTransactions()
+  return useMemo(
+    () => (accounts && transactions ? accountBalances(accounts, transactions) : undefined),
+    [accounts, transactions],
+  )
 }

@@ -1,26 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { summarize } from './summary'
-import type { Transaction } from './types'
-
-let seq = 0
-function tx(partial: Partial<Transaction>): Transaction {
-  seq += 1
-  return {
-    id: `t${seq}`,
-    type: 'expense',
-    amount: 100,
-    currency: 'INR',
-    description: '',
-    accountId: 'acc-hdfc',
-    categoryId: 'cat-food',
-    date: '2026-11-01',
-    source: 'manual',
-    needsReview: false,
-    createdAt: '2026-11-01T00:00:00.000Z',
-    updatedAt: '2026-11-01T00:00:00.000Z',
-    ...partial,
-  }
-}
+import { makeTransaction as tx } from '../test/factories'
 
 describe('summarize', () => {
   it('totals income and expenses', () => {

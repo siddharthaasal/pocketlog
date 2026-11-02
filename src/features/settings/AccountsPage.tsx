@@ -1,11 +1,12 @@
 import { Link } from 'wouter'
-import { Card, Loading, PageHeader, SectionTitle } from '../../components/ui'
-import { useAccounts } from '../../data/hooks'
+import { Card, Loading, Money, PageHeader, SectionTitle } from '../../components/ui'
+import { useAccounts, useBalances } from '../../data/hooks'
 import { ACCOUNT_TYPE_LABELS, type Account } from '../../domain/types'
 import { SettingsRow } from './SettingsList'
 
 export function AccountsPage() {
   const accounts = useAccounts()
+  const balances = useBalances()
   const active = accounts?.filter((a) => !a.archived) ?? []
   const archived = accounts?.filter((a) => a.archived) ?? []
 
@@ -17,9 +18,10 @@ export function AccountsPage() {
         <span className={muted ? 'text-muted' : undefined}>
           {a.name}
           {a.isDefault && <span className="ml-2 text-[13px] text-accent">Default</span>}
+          <span className="block text-[13px] text-muted">{ACCOUNT_TYPE_LABELS[a.type]}</span>
         </span>
       }
-      detail={ACCOUNT_TYPE_LABELS[a.type]}
+      detail={balances && <Money paise={balances.get(a.id) ?? 0} />}
     />
   )
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatINR, paiseToInput, parseRupees } from './money'
+import { formatINR, formatINRCompact, niceCeiling, paiseToInput, parseRupees } from './money'
 
 describe('parseRupees', () => {
   it.each([
@@ -42,5 +42,25 @@ describe('formatINR', () => {
     expect(formatINR(1234567_00)).toBe('₹12,34,567')
     expect(formatINR(35050)).toBe('₹350.50')
     expect(formatINR(-5000)).toBe('-₹50')
+  })
+})
+
+describe('formatINRCompact', () => {
+  it('uses thousands, lakhs and crores', () => {
+    expect(formatINRCompact(950_00)).toBe('₹950')
+    expect(formatINRCompact(25_500_00)).toBe('₹25.5K')
+    expect(formatINRCompact(1_20_000_00)).toBe('₹1.2L')
+    expect(formatINRCompact(2_30_00_000_00)).toBe('₹2.3Cr')
+  })
+})
+
+describe('niceCeiling', () => {
+  it('rounds up to a clean axis maximum', () => {
+    expect(niceCeiling(0)).toBe(0)
+    expect(niceCeiling(37_000_00)).toBe(40_000_00)
+    expect(niceCeiling(52_569_00)).toBe(60_000_00)
+    expect(niceCeiling(24_400_50)).toBe(25_000_00)
+    expect(niceCeiling(10_000_00)).toBe(10_000_00)
+    expect(niceCeiling(10_000_01)).toBe(15_000_00)
   })
 })

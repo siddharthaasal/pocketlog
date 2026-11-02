@@ -1,4 +1,5 @@
 import { Route, Switch } from 'wouter'
+import { AnalyticsPage } from '../features/analytics/AnalyticsPage'
 import { DashboardPage } from '../features/dashboard/DashboardPage'
 import { AccountEditPage } from '../features/settings/AccountEditPage'
 import { AccountsPage } from '../features/settings/AccountsPage'
@@ -17,6 +18,7 @@ export function App() {
         <Route path="/transactions" component={TransactionsPage} />
         <Route path="/add" component={TransactionFormPage} />
         <Route path="/transactions/:id" component={TransactionFormPage} />
+        <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/settings/categories" component={CategoriesPage} />
         <Route path="/settings/categories/:id" component={CategoryEditPage} />

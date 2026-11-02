@@ -2,18 +2,32 @@ import { Link } from 'wouter'
 import { CategoryBadge, Money } from '../../components/ui'
 import type { Lookups } from '../../data/hooks'
 import type { Transaction } from '../../domain/types'
+import { formatDayHeading } from '../../lib/dates'
 
-export function TransactionRow({ t, lookups }: { t: Transaction; lookups: Lookups }) {
+export function TransactionRow({
+  t,
+  lookups,
+  showDate = false,
+}: {
+  t: Transaction
+  lookups: Lookups
+  /** For lists that aren't grouped by day. */
+  showDate?: boolean
+}) {
   const category = t.categoryId ? lookups.categories.get(t.categoryId) : undefined
   const account = lookups.accounts.get(t.accountId)
   const toAccount = t.toAccountId ? lookups.accounts.get(t.toAccountId) : undefined
 
   const title =
     t.description || t.merchant || category?.name || (t.type === 'transfer' ? 'Transfer' : '—')
-  const subtitle =
-    t.type === 'transfer'
-      ? `${account?.name ?? '?'} → ${toAccount?.name ?? '?'}`
-      : [category?.name, account?.name].filter(Boolean).join(' · ')
+  const subtitle = [
+    showDate && formatDayHeading(t.date),
+    ...(t.type === 'transfer'
+      ? [`${account?.name ?? '?'} → ${toAccount?.name ?? '?'}`]
+      : [category?.name, account?.name]),
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
     <Link
