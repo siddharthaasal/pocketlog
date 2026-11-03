@@ -135,6 +135,8 @@ The same Shortcut works on the Mac, and because the file is in iCloud Drive it a
 - **Restore**: same file, "replace everything" mode, behind a confirmation.
 - iPhone ↔ Mac: export on one, import on the other. Since merge is idempotent, doing it in both directions is safe.
 
+**As built (Phase 4):** Settings → Backup & sync. Backups are created first and saved with a second tap (the share sheet needs a fresh tap, and passphrase encryption takes about a second on a phone). Encrypted files use PBKDF2-SHA256 (600,000 iterations) and AES-256-GCM; a wrong passphrase or an altered file fails to open. Every imported row is validated against the app's own schemas, and rows pointing at missing accounts or categories are listed and skipped. The merge is recomputed inside the write transaction, so edits made while the preview is open aren't lost. After a merge, only one default account remains. Default categories and accounts are stamped with a fixed old timestamp (`2000-01-01`), so if storage is wiped and they're recreated, the edited versions in a backup still win. The dashboard asks for a backup when the last one is 7 or more days old.
+
 ## 9. iOS PWA limitations (what we're designing around)
 
 - Separate storage for the Home Screen app vs Safari → always use the installed app on iPhone.

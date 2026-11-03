@@ -45,6 +45,14 @@ export function SettingsPage() {
         </section>
 
         <section>
+          <SectionTitle>Your data</SectionTitle>
+          <Card className="divide-y divide-border overflow-hidden">
+            <SettingsRow href="/settings/data" title="Backup & sync" />
+            <SettingsRow href="/settings/privacy" title="Privacy" />
+          </Card>
+        </section>
+
+        <section>
           <SectionTitle>Storage</SectionTitle>
           <Card className="divide-y divide-border overflow-hidden">
             <SettingsRow
