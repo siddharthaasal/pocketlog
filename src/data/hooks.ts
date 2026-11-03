@@ -88,3 +88,10 @@ export function useUnparsedInbox(): InboxEntry[] | undefined {
       .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt)),
   )
 }
+
+export function useMeta<T>(key: string): { value: T | undefined } | undefined {
+  return useLiveQuery(
+    async () => ({ value: (await db.meta.get(key))?.value as T | undefined }),
+    [key],
+  )
+}

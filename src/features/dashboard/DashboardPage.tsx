@@ -8,6 +8,7 @@ import { totalBalance } from '../../domain/balances'
 import { summarize } from '../../domain/summary'
 import { formatMonth } from '../../lib/dates'
 import { MonthSwitcher } from '../shared/MonthSwitcher'
+import { BackupReminder } from './BackupReminder'
 import { useMonthParam } from '../shared/useMonthParam'
 import { TransactionRow } from '../transactions/TransactionRow'
 
@@ -29,6 +30,7 @@ export function DashboardPage() {
         <Loading />
       ) : (
         <div className="space-y-6">
+          <BackupReminder />
           <Card className="p-5">
             <div className="text-[13px] font-medium text-muted">Spent</div>
             <div className="mt-1 text-[40px] leading-none font-semibold tracking-tight">

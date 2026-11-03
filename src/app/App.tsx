@@ -1,6 +1,8 @@
 import { Route, Switch } from 'wouter'
 import { AnalyticsPage } from '../features/analytics/AnalyticsPage'
 import { DashboardPage } from '../features/dashboard/DashboardPage'
+import { BackupPage } from '../features/data/BackupPage'
+import { PrivacyPage } from '../features/data/PrivacyPage'
 import { InboxPage } from '../features/inbox/InboxPage'
 import { AccountEditPage } from '../features/settings/AccountEditPage'
 import { AccountsPage } from '../features/settings/AccountsPage'
@@ -22,6 +24,8 @@ export function App() {
         <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/inbox" component={InboxPage} />
         <Route path="/settings" component={SettingsPage} />
+        <Route path="/settings/data" component={BackupPage} />
+        <Route path="/settings/privacy" component={PrivacyPage} />
         <Route path="/settings/categories" component={CategoriesPage} />
         <Route path="/settings/categories/:id" component={CategoryEditPage} />
         <Route path="/settings/accounts" component={AccountsPage} />

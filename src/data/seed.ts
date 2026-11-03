@@ -1,6 +1,5 @@
 import type { Transaction as DexieTransaction } from 'dexie'
 import { accountSchema, categorySchema, type Account, type Category } from '../domain/types'
-import { nowISO } from '../lib/ids'
 
 /**
  * Seed rows use fixed IDs so the iPhone and the Mac create identical defaults,
@@ -41,8 +40,14 @@ export const SEED_ACCOUNTS: SeedAccount[] = [
   { id: 'acc-credit-card', name: 'Credit Card', type: 'credit_card', aliases: ['credit card', 'card'], isDefault: false },
 ]
 
+/**
+ * Defaults are stamped with a fixed, old time. If the device's storage is ever wiped and the
+ * defaults are recreated, any edit in a backup is newer and wins when it's merged back.
+ */
+export const SEED_TIMESTAMP = '2000-01-01T00:00:00.000Z'
+
 export async function seedDatabase(tx: DexieTransaction): Promise<void> {
-  const now = nowISO()
+  const now = SEED_TIMESTAMP
   const categories = SEED_CATEGORIES.map((c) =>
     categorySchema.parse({ ...c, archived: false, createdAt: now, updatedAt: now }),
   )
