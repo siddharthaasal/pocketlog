@@ -118,7 +118,8 @@ export const inboxEntrySchema = z.object({
   key: z.string().min(1),
   rawText: z.string(),
   recordedAt: z.string(),
-  status: z.enum(['imported', 'skipped']),
+  /** imported → became a transaction; unparsed → needs a person; skipped → dismissed. */
+  status: z.enum(['imported', 'unparsed', 'skipped']),
   transactionId: id.optional(),
 })
 

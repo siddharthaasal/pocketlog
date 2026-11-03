@@ -33,6 +33,7 @@ export function SettingsPage() {
               title="Accounts"
               detail={activeCount(accounts)}
             />
+            <SettingsRow href="/inbox" title="Siri inbox" />
           </Card>
         </section>
 

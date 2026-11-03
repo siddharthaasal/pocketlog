@@ -33,6 +33,10 @@ import {
 } from '../../domain/types'
 import { todayISO } from '../../lib/dates'
 import { goBack } from '../../lib/navigation'
+import { resolveInboxEntry } from '../../data/inbox'
+import { MicIcon } from '../../components/icons'
+import { ISSUE_MESSAGES, parseEntry, type ParseIssue, type ParseResult } from '../../parser/parse'
+import type { AddFromTextState } from '../inbox/InboxPage'
 
 const TYPE_OPTIONS = [
   { value: 'expense', label: 'Expense' },
@@ -78,6 +82,7 @@ export function TransactionFormPage() {
   const categories = useCategories()
   const accounts = useAccounts()
 
+  const prefill = id ? undefined : readAddState()
   const title = id ? 'Edit transaction' : 'New transaction'
   if (!categories || !accounts || (id && existing === undefined)) {
     return (
@@ -109,7 +114,13 @@ export function TransactionFormPage() {
         paymentMethod: existing.paymentMethod ?? '',
         notes: existing.notes ?? '',
       }
-    : newFormState(parseType(params.get('type')), accounts)
+    : prefill
+      ? applyParse(
+          newFormState('expense', accounts),
+          parseEntry(prefill.text, { categories, accounts, today: todayISO() }),
+          accounts,
+        )
+      : newFormState(parseType(params.get('type')), accounts)
 
   return (
     <>
@@ -118,11 +129,38 @@ export function TransactionFormPage() {
         key={existing?.id ?? 'new'}
         existing={existing ?? undefined}
         initial={initial}
+        prefill={prefill}
         categories={categories}
         accounts={accounts}
       />
     </>
   )
+}
+
+/** Text handed over from the Siri inbox ("Add manually"), carried in history state. */
+function readAddState(): AddFromTextState | undefined {
+  const state: unknown = window.history.state
+  if (state && typeof state === 'object' && typeof (state as AddFromTextState).text === 'string') {
+    return state as AddFromTextState
+  }
+  return undefined
+}
+
+/** Copies a parse result into the form. A guessed category is left blank so it gets picked. */
+function applyParse(form: FormState, r: ParseResult, accounts: readonly Account[]): FormState {
+  const accountId = r.accountId ?? form.accountId
+  return {
+    ...form,
+    type: r.type,
+    amount: r.amount ? paiseToInput(r.amount) : form.amount,
+    description: r.description || form.description,
+    categoryId: r.issues.includes('category-guessed') ? '' : (r.categoryId ?? ''),
+    accountId,
+    toAccountId:
+      r.type === 'transfer' ? (r.toAccountId ?? pickTransferTarget(accounts, accountId)) : '',
+    date: r.date,
+    paymentMethod: r.paymentMethod ?? form.paymentMethod,
+  }
 }
 
 function newFormState(type: TransactionType, accounts: readonly Account[]): FormState {
@@ -144,11 +182,13 @@ function newFormState(type: TransactionType, accounts: readonly Account[]): Form
 function TransactionForm({
   existing,
   initial,
+  prefill,
   categories,
   accounts,
 }: {
   existing: Transaction | undefined
   initial: FormState
+  prefill: AddFromTextState | undefined
   categories: Category[]
   accounts: Account[]
 }) {
@@ -156,6 +196,18 @@ function TransactionForm({
   const [form, setForm] = useState(initial)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [quickText, setQuickText] = useState(prefill?.text ?? '')
+  const [quickIssues, setQuickIssues] = useState<ParseIssue[]>(() =>
+    prefill ? parseEntry(prefill.text, { categories, accounts, today: todayISO() }).issues : [],
+  )
+
+  function fillFromText() {
+    if (!quickText.trim()) return
+    const result = parseEntry(quickText, { categories, accounts, today: todayISO() })
+    setForm((f) => applyParse(f, result, accounts))
+    setQuickIssues(result.issues)
+    setErrors({})
+  }
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -204,7 +256,10 @@ function TransactionForm({
     setSaving(true)
     try {
       if (existing) await updateTransaction(existing.id, input)
-      else await addTransaction(input)
+      else {
+        const saved = await addTransaction(input)
+        if (prefill?.inboxKey) await resolveInboxEntry(prefill.inboxKey, saved.id)
+      }
       goBack(navigate)
     } catch (error) {
       setErrors(toFieldErrors(error) ?? { form: (error as Error).message })
@@ -222,6 +277,42 @@ function TransactionForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-5" noValidate>
+      {!existing && (
+        <div>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <MicIcon
+                width={18}
+                height={18}
+                className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted"
+              />
+              <TextInput
+                value={quickText}
+                onChange={(e) => setQuickText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    fillFromText()
+                  }
+                }}
+                placeholder="Spent 350 on lunch using HDFC"
+                aria-label="Describe the transaction"
+                enterKeyHint="done"
+                className="pl-9"
+              />
+            </div>
+            <Button variant="secondary" onClick={fillFromText} disabled={!quickText.trim()}>
+              Fill
+            </Button>
+          </div>
+          <p className="mt-1.5 px-1 text-[13px] text-muted">
+            {quickIssues.length > 0
+              ? `Check: ${quickIssues.map((i) => ISSUE_MESSAGES[i]).join(' · ')}`
+              : 'Type or dictate a sentence to fill the form.'}
+          </p>
+        </div>
+      )}
+
       <Segmented value={form.type} options={TYPE_OPTIONS} onChange={changeType} />
 
       <Field label="Amount" error={errors.amount}>

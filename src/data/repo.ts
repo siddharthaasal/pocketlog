@@ -17,6 +17,8 @@ import { db } from './db'
 interface AddOptions {
   source?: Transaction['source']
   needsReview?: boolean
+  /** A deterministic id, so the same Siri entry imported on two devices merges as one. */
+  id?: string
 }
 
 /** Checks that referenced accounts/categories exist, are active and match the transaction type. */
@@ -38,13 +40,13 @@ async function assertReferences(t: TransactionInput): Promise<void> {
 
 export async function addTransaction(
   input: TransactionInput,
-  { source = 'manual', needsReview = false }: AddOptions = {},
+  { source = 'manual', needsReview = false, id = newId() }: AddOptions = {},
 ): Promise<Transaction> {
   const fields = transactionInputSchema.parse(input)
   const now = nowISO()
   const transaction = transactionSchema.parse({
     ...fields,
-    id: newId(),
+    id,
     currency: 'INR',
     source,
     needsReview,
@@ -77,6 +79,11 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
     await db.transactions.put(next)
     return next
   })
+}
+
+/** Accepts a Siri entry as parsed. */
+export async function confirmTransaction(id: string): Promise<void> {
+  await db.transactions.update(id, { needsReview: false, updatedAt: nowISO() })
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
@@ -181,8 +188,4 @@ export async function updateAccount(
   })
 }
 
-/** The account new transactions start with: the marked default, else the first active one. */
-export function pickDefaultAccount(accounts: readonly Account[]): Account | undefined {
-  const active = accounts.filter((a) => !a.archived && !a.deletedAt)
-  return active.find((a) => a.isDefault) ?? active[0]
-}
+export { pickDefaultAccount } from '../domain/accounts'
