@@ -43,7 +43,7 @@ src/
 
 Rule: `domain/` and `parser/` import nothing from `data/`, `features/` or React. UI → repositories → Dexie.
 
-## 4. Data model (Dexie schema v1)
+## 4. Data model (Dexie schema v2; §12 lists what v2 added)
 
 All entities carry `createdAt`, `updatedAt` (ISO timestamps) and `deletedAt?` (soft delete — needed so deletions survive merge-sync). Lists hide soft-deleted rows; "Delete all data" hard-wipes.
 
@@ -153,6 +153,8 @@ The same Shortcut works on the Mac, and because the file is in iCloud Drive it a
 
 5. **Reconcile bank statements**: read an .xls/.xlsx/.csv statement, match it to PocketLog, flag amount conflicts, add what's missing (§11).
 
+6. **Finance tracker** (phases 6–12): holdings, loans, subscriptions, insurance, net worth, home summary (§12).
+
 The plan's separate sync and deployment phases are folded into 1 and 4.
 
 ## 11. Bank statement reconciliation (Phase 5)
@@ -166,3 +168,26 @@ The **Reconcile** tab (`/reconcile`). Deterministic rules, no LLM; everything ru
 - **Noise**: ₹1 account-validation credits and similar are ignored by a built-in pattern; "Always ignore" stores a payee key in `meta` (`reconcile.ignore`) and can be undone from the ignored list.
 - **Data change**: one optional field, `Transaction.bankRef`, so importing a statement twice never duplicates rows. It is unindexed, so there is no Dexie migration, and older backups simply lack it.
 - **Safety**: the statement's account is never guessed silently; if the bank can't be identified you choose it. Adding entries is all-or-nothing.
+
+## 12. Finance tracker (Phases 6–12)
+
+Replaces the "Personal Finance Tracker" spreadsheet. Everything stays on the device. The rule: **store a number only when you or a bank statement is its source; work out everything else** (cash flow, savings balances, gain, allocation, per-month cost), so it can never disagree with the transactions.
+
+**Schema v2** adds eight tables (all versioned records with `deletedAt`, merged by `updatedAt` like the originals) and optional fields on existing ones, so v1 data is not rewritten:
+
+| Table                    | What it is                                                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `holdings`, `valuations` | Something you own, and its value at the end of each month (`id = val-<holding>-<month>`, so one row per month)    |
+| `loans`, `loanBalances`  | A loan you owe or money you lent, and what was left each month (`lb-<loan>-<month>`)                              |
+| `subscriptions`          | What bills you on a schedule                                                                                      |
+| `policies`               | Insurance policies and renewal dates                                                                              |
+| `accountBalances`        | The balance a statement printed on a date (`ab-<account>-<date>`), saved from Reconcile; drives the drift warning |
+| `snapshots`              | A closed month of net worth, frozen (`id = month`)                                                                |
+
+New optional fields: `Transaction.loanId / subscriptionId / holdingId / refundOf`; `Account.institution / holder / last4 / nominee / documentsNote / openingDate / creditLimit / statementDay / dueDay` and type `investment`. Settings live in `meta` (`allocation.targets`, `networth.investedBefore`, `subscriptions.ignore`).
+
+**Backup format 2** includes the new tables. Format 1 files still import (the new lists are empty); a format 1 app refuses format 2 files rather than dropping data silently.
+
+**Refunds**: an income entry with `refundOf` carries the refunded expense's category and counts against that spending, not as income, so the savings rate is not inflated (`domain/summary.ts`). Splitting one payment across categories is not supported; use two entries.
+
+**Wealth section** (`/wealth/*`, `features/wealth`): Net worth, Investments (gain, XIRR from tagged transfers, target mix with Over/Under at ±2 points), Loans (balance estimate rolled forward from interest and tagged repayments), Subscriptions (recurring-payment detection: three charges about a month apart, or two about a year apart, for similar amounts), Insurance. Closing a month fills every net worth line from accounts, valuations and loan balances; any figure can be changed before the snapshot is frozen. Pure logic is in `domain/{investments,loans,recurring,networth}.ts` with tests.

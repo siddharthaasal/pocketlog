@@ -4,7 +4,7 @@ import { formatMonth } from '../../lib/dates'
 
 const W = 640
 const H = 200
-const PAD = { left: 8, right: 8, top: 16, bottom: 28 }
+const PAD = { left: 8, right: 8, top: 30, bottom: 28 }
 
 /** Net worth month by month. Drawn to scale from the lowest to the highest closed month. */
 export function NetWorthChart({ rows }: { rows: readonly SnapshotRow[] }) {
@@ -77,7 +77,7 @@ export function NetWorthChart({ rows }: { rows: readonly SnapshotRow[] }) {
           )}
           <text
             x={x(rows.length - 1)}
-            y={y(last.summary.netWorth) - 10}
+            y={Math.max(y(last.summary.netWorth) - 10, 14)}
             textAnchor={rows.length > 1 ? 'end' : 'middle'}
           >
             {formatINRCompact(last.summary.netWorth)}

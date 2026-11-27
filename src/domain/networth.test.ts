@@ -86,7 +86,7 @@ describe('computeLines', () => {
         val('mf', '2026-11', 90, 100),
         val('etf', '2026-10', 40, 50),
         val('fd', '2026-11', 20, 21),
-        val('house', '2026-11', 0, 5000),
+        val('house', '2026-11', 3000, 5000),
       ],
       loans: [
         loan('home', { kind: 'home' }),
@@ -108,6 +108,7 @@ describe('computeLines', () => {
       other_loans: 60,
       money_lent: 30,
     })
+    // The flat's cost is not an investment, so it isn't part of what was put in.
     expect(invested).toBe(90 + 40 + 20)
     expect(staleHoldings.map((h) => h.id)).toEqual(['etf'])
     expect(staleLoans.map((l) => l.id)).toEqual(['car'])

@@ -244,7 +244,7 @@ export function FitSelect({
     <span
       style={style}
       className={cx(
-        'relative inline-flex max-w-full items-center gap-1.5 whitespace-nowrap focus-within:ring-2 focus-within:ring-accent',
+        'relative inline-flex max-w-full items-center gap-1.5 whitespace-nowrap has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent has-[:focus-visible]:ring-inset',
         className,
       )}
     >
