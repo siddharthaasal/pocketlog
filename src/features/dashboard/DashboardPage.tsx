@@ -9,6 +9,7 @@ import { summarize } from '../../domain/summary'
 import { formatMonth } from '../../lib/dates'
 import { MonthSwitcher } from '../shared/MonthSwitcher'
 import { BackupReminder } from './BackupReminder'
+import { WealthSummary } from './WealthSummary'
 import { useMonthParam } from '../shared/useMonthParam'
 import { TransactionRow } from '../transactions/TransactionRow'
 
@@ -70,6 +71,8 @@ export function DashboardPage() {
               </span>
             </Link>
           )}
+
+          <WealthSummary />
 
           {transactions.length === 0 ? (
             <EmptyState title={`No transactions in ${formatMonth(month)}.`}>
