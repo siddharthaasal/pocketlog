@@ -39,6 +39,7 @@
   --color-negative: var(--negative);
   --color-chart: var(--chart);
   --color-chart-muted: var(--chart-muted);
+  --color-icon: var(--icon);
   --font-sans:
     'Inter Variable', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif,
     'Apple Color Emoji';
@@ -56,14 +57,17 @@
   --accent-fg: #ffffff;
   --positive: #14833b;
   --negative: #cf3a37;
+  /* Icons are pure black on light and pure white on dark. */
+  --icon: #000000;
   /* Chart series colour, validated against the surface in each theme. */
   --chart: #0075de;
   --chart-muted: color-mix(in oklab, var(--chart) 30%, var(--surface));
   color-scheme: light;
 }
 
+/* Dark applies when the device is dark (unless Light was chosen), or when Dark was chosen. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #191919;
     --surface: #202020;
     --surface-2: #2d2d2d;
@@ -74,9 +78,26 @@
     --accent-fg: #0b1620;
     --positive: #4dab6d;
     --negative: #ff7369;
+    --icon: #ffffff;
     --chart: #529cca;
     color-scheme: dark;
   }
+}
+
+:root[data-theme='dark'] {
+  --bg: #191919;
+  --surface: #202020;
+  --surface-2: #2d2d2d;
+  --border: #363636;
+  --text: #ebebea;
+  --muted: #9b9a97;
+  --accent: #529cca;
+  --accent-fg: #0b1620;
+  --positive: #4dab6d;
+  --negative: #ff7369;
+  --icon: #ffffff;
+  --chart: #529cca;
+  color-scheme: dark;
 }
 
 html {

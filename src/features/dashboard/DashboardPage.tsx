@@ -92,7 +92,7 @@ export function DashboardPage() {
                       return (
                         <div key={categoryId} className="flex items-center gap-3 px-4 py-3">
                           <CategoryBadge
-                            icon={category?.icon ?? '❔'}
+                            icon={category?.icon ?? 'help'}
                             color={category?.color ?? '#868e96'}
                           />
                           <div className="min-w-0 flex-1">

@@ -9,6 +9,7 @@ import {
   type TextareaHTMLAttributes,
 } from 'react'
 import { Link } from 'wouter'
+import { CategoryIcon } from './categoryIcons'
 import { formatINR } from '../domain/money'
 import { cx } from '../lib/cx'
 import { ChevronLeftIcon } from './icons'
@@ -176,14 +177,14 @@ export function Money({
   )
 }
 
-export function CategoryBadge({ icon, color }: { icon: string; color: string }) {
+/** A category's icon on a quiet square. Icons are black or white; `color` stays on the category for tags and charts. */
+export function CategoryBadge({ icon }: { icon: string; color?: string }) {
   return (
     <span
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[16px]"
-      style={{ backgroundColor: `${color}1f` }}
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-2"
       aria-hidden="true"
     >
-      {icon}
+      <CategoryIcon icon={icon} size={18} />
     </span>
   )
 }

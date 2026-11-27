@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'wouter'
+import { CategoryIcon } from '../../components/categoryIcons'
+import { TransferIcon } from '../../components/icons'
 import { EmptyState, Money } from '../../components/ui'
 import {
   applyEmailAmount,
@@ -32,11 +34,16 @@ const signed = (t: Pick<Transaction, 'type' | 'amount'>) =>
 const num = 'text-right'
 
 function CategoryTag({ t, categories }: { t: Transaction; categories: readonly Category[] }) {
-  if (t.type === 'transfer') return <Tag>⇄ Transfer</Tag>
+  if (t.type === 'transfer')
+    return (
+      <Tag>
+        <TransferIcon size={13} className="inline" /> Transfer
+      </Tag>
+    )
   const c = categories.find((x) => x.id === t.categoryId)
   return (
     <Tag color={c?.color}>
-      {c?.icon} {c?.name ?? '—'}
+      <CategoryIcon icon={c?.icon ?? 'tag'} size={13} className="inline" /> {c?.name ?? '—'}
     </Tag>
   )
 }

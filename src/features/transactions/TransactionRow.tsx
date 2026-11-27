@@ -34,7 +34,7 @@ export function TransactionRow({
       href={`/transactions/${t.id}`}
       className="flex items-center gap-3 px-4 py-3 hover:bg-surface-2/60"
     >
-      <CategoryBadge icon={category?.icon ?? '↔︎'} color={category?.color ?? '#868e96'} />
+      <CategoryBadge icon={category?.icon ?? 'transfer'} color={category?.color ?? '#868e96'} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[15px]">{title}</div>
         <div className="truncate text-[13px] text-muted">

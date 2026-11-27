@@ -1,4 +1,6 @@
 import { useLocation } from 'wouter'
+import { CategoryIcon } from '../../components/categoryIcons'
+import { TransferIcon } from '../../components/icons'
 import { Money } from '../../components/ui'
 import {
   CalendarGlyph,
@@ -75,10 +77,13 @@ export function TransactionsTable({
               </Td>
               <Td>
                 {t.type === 'transfer' ? (
-                  <Tag>⇄ Transfer</Tag>
+                  <Tag>
+                    <TransferIcon size={13} className="inline" /> Transfer
+                  </Tag>
                 ) : (
                   <Tag color={category?.color}>
-                    {category?.icon} {category?.name ?? '—'}
+                    <CategoryIcon icon={category?.icon ?? 'tag'} size={13} className="inline" />{' '}
+                    {category?.name ?? '—'}
                   </Tag>
                 )}
               </Td>
