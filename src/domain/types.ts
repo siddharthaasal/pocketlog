@@ -104,6 +104,8 @@ export const transactionSchema = z
     needsReview: z.boolean(),
     /** Identifies the bank-statement row this came from, so reconciling never duplicates it. */
     bankRef: z.string().max(100).optional(),
+    /** Identifies the swept email this matched or came from (see domain/emailSweep). */
+    emailRef: z.string().max(100).optional(),
   })
   .superRefine(refineTransaction)
 

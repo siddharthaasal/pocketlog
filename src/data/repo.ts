@@ -21,6 +21,8 @@ interface AddOptions {
   id?: string
   /** The bank-statement row this was created from (see domain/reconcile). */
   bankRef?: string
+  /** The swept email this was created from (see domain/emailSweep). */
+  emailRef?: string
 }
 
 /** Only the tables this transaction needs, so statement imports can nest inside their own transaction. */
@@ -71,7 +73,7 @@ async function assertReferences(t: TransactionInput): Promise<void> {
 
 export async function addTransaction(
   input: TransactionInput,
-  { source = 'manual', needsReview = false, id = newId(), bankRef }: AddOptions = {},
+  { source = 'manual', needsReview = false, id = newId(), bankRef, emailRef }: AddOptions = {},
 ): Promise<Transaction> {
   const fields = transactionInputSchema.parse(input)
   const now = nowISO()
@@ -82,6 +84,7 @@ export async function addTransaction(
     source,
     needsReview,
     ...(bankRef && { bankRef }),
+    ...(emailRef && { emailRef }),
     createdAt: now,
     updatedAt: now,
   })
@@ -105,6 +108,7 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
       source: existing.source,
       createdAt: existing.createdAt,
       ...(existing.bankRef && { bankRef: existing.bankRef }),
+      ...(existing.emailRef && { emailRef: existing.emailRef }),
       ...fields,
       needsReview: false,
       updatedAt: nowISO(),
