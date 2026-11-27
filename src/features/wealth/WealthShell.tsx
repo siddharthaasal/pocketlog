@@ -7,6 +7,7 @@ import { cx } from '../../lib/cx'
 export const WEALTH_SECTIONS = [
   { href: '/wealth/investments', label: 'Investments' },
   { href: '/wealth/loans', label: 'Loans' },
+  { href: '/wealth/subscriptions', label: 'Subscriptions' },
 ] as const
 
 export function WealthShell({ children, action }: { children: ReactNode; action?: ReactNode }) {

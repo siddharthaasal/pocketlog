@@ -6,6 +6,14 @@ import { holdingSchema, valuationSchema } from '../domain/types'
 import { applyMerge, collectData, deleteAllData, exportBackupText } from './backup'
 import Dexie from 'dexie'
 import { createDatabase, db } from './db'
+import {
+  addFromSuggestion,
+  ignoreRecurring,
+  linkCharges,
+  saveSubscription,
+  unignoreRecurring,
+} from './subscriptions'
+import { suggestRecurring } from '../domain/recurring'
 import { saveHolding, saveValuations, setHoldingArchived } from './investments'
 import { monthRowId, removeRecord, saveAccountBalance, saveRecord } from './records'
 import { addTransaction, updateTransaction } from './repo'
@@ -234,5 +242,57 @@ describe('investments data', () => {
     const h = await saveHolding({ name: 'A', kind: 'stock', assetClass: 'equity' })
     expect((await setHoldingArchived(h.id, true)).archived).toBe(true)
     expect((await setHoldingArchived(h.id, false)).archived).toBe(false)
+  })
+})
+
+describe('subscriptions data', () => {
+  const netflix = (date: string) => ({
+    type: 'expense' as const,
+    amount: 649_00,
+    description: 'Netflix',
+    categoryId: 'cat-subscriptions',
+    accountId: 'acc-hdfc',
+    date,
+  })
+
+  it('turns a detected pattern into a subscription and links its charges', async () => {
+    const txs = [
+      await addTransaction(netflix('2026-09-05')),
+      await addTransaction(netflix('2026-10-05')),
+      await addTransaction(netflix('2026-11-05')),
+    ]
+    const found = suggestRecurring(txs, new Set(), '2026-11-27')
+    expect(found).toHaveLength(1)
+
+    const sub = await addFromSuggestion(found[0]!)
+    expect(sub).toMatchObject({ service: 'Netflix', billing: 'monthly', status: 'active' })
+    expect(sub.accountId).toBe('acc-hdfc')
+    const linked = await db.transactions.where('subscriptionId').equals(sub.id).count()
+    expect(linked).toBe(3)
+    expect((await db.subscriptions.get(sub.id))?.nextRenewal).toBe('2026-12-05')
+    // Once linked, the same pattern is no longer suggested.
+    const after = await db.transactions.toArray()
+    expect(suggestRecurring(after, new Set(), '2026-11-27')).toEqual([])
+  })
+
+  it('moves the renewal forward when a later charge is linked', async () => {
+    const sub = await saveSubscription({
+      service: 'Netflix',
+      kind: 'entertainment',
+      cost: 649_00,
+      billing: 'monthly',
+      nextRenewal: '2026-11-05',
+    })
+    const t = await addTransaction(netflix('2026-11-05'))
+    await linkCharges(sub.id, [t.id])
+    expect((await db.subscriptions.get(sub.id))?.nextRenewal).toBe('2026-12-05')
+  })
+
+  it('remembers payees you said are not subscriptions', async () => {
+    await ignoreRecurring('cafe')
+    await ignoreRecurring('cafe')
+    expect((await db.meta.get('subscriptions.ignore'))?.value).toEqual(['cafe'])
+    await unignoreRecurring('cafe')
+    expect((await db.meta.get('subscriptions.ignore'))?.value).toEqual([])
   })
 })

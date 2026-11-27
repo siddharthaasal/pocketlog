@@ -16,6 +16,8 @@ import { HoldingEditPage } from '../features/wealth/HoldingEditPage'
 import { InvestmentsPage } from '../features/wealth/InvestmentsPage'
 import { LoanEditPage } from '../features/wealth/LoanEditPage'
 import { LoansPage } from '../features/wealth/LoansPage'
+import { SubscriptionEditPage } from '../features/wealth/SubscriptionEditPage'
+import { SubscriptionsPage } from '../features/wealth/SubscriptionsPage'
 import { Layout } from './Layout'
 
 export function App() {
@@ -36,6 +38,8 @@ export function App() {
         <Route path="/wealth/investments/:id" component={HoldingEditPage} />
         <Route path="/wealth/loans" component={LoansPage} />
         <Route path="/wealth/loans/:id" component={LoanEditPage} />
+        <Route path="/wealth/subscriptions" component={SubscriptionsPage} />
+        <Route path="/wealth/subscriptions/:id" component={SubscriptionEditPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/settings/data" component={BackupPage} />
         <Route path="/settings/privacy" component={PrivacyPage} />
