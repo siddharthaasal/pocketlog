@@ -37,14 +37,14 @@ STATE_FILE = Path.home() / ".email_sweep_state.json"
 FIRST_RUN_LOOKBACK_DAYS = 7
 OVERLAP_DAYS = 1                                      # re-scan a day for safety
 
-# Mailboxes to read. "inbox" is every account's Inbox. A Gmail label shows up in Mail.app as a
-# mailbox under the Gmail account, so list its exact name here. Run with --list-mailboxes to see
-# the names Mail uses.
-MAILBOXES = ["inbox", "reference-finances-bank"]
+# Mailboxes to read, by the name Mail shows. "inbox" is every account's Inbox. A Gmail label shows
+# up in Mail.app as a mailbox, and a nested label like Reference/Finances/Bank shows only its last
+# part ("Bank"). Run with --list-mailboxes to see the names. Skip huge ones like All Mail.
+MAILBOXES = ["inbox", "Bank", "Invoices", "Shopping", "Travel & Commute"]
 
-# Everything in these mailboxes is read, whoever sent it: you already filed it there on purpose.
+# Everything in these mailboxes is read, whoever sent it: you filed it there on purpose.
 # Other mailboxes (the Inbox) are narrowed to the senders below.
-READ_ALL_SENDERS_IN = {"reference-finances-bank"}
+READ_ALL_SENDERS_IN = {"Bank", "Invoices", "Shopping", "Travel & Commute"}
 
 # Only emails whose sender contains one of these (case-insensitive) are read from other mailboxes.
 SENDERS = ["hdfcbank", "icicibank", "axisbank", "swiggy", "zomato",
@@ -161,9 +161,9 @@ on run argv
         set end of found to {inbox, "", "inbox"}
       else
         repeat with acc in accounts
-          if (exists mailbox (boxName as string) of acc) then
-            set end of found to {mailbox (boxName as string) of acc, name of acc, boxName as string}
-          end if
+          repeat with mb in (mailboxes of acc whose name is (boxName as string))
+            set end of found to {mb, name of acc, boxName as string}
+          end repeat
         end repeat
       end if
       repeat with f in found
@@ -189,7 +189,7 @@ on run argv
     if (item 3 of argv) is "inbox" then
       set mb to inbox
     else
-      set mb to mailbox (item 3 of argv) of account (item 2 of argv)
+      set mb to first mailbox of account (item 2 of argv) whose name is (item 3 of argv)
     end if
     set m to first message of mb whose message id is (item 1 of argv)
     return content of m
