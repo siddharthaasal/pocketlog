@@ -1,9 +1,12 @@
-import type {
-  ButtonHTMLAttributes,
-  InputHTMLAttributes,
-  ReactNode,
-  SelectHTMLAttributes,
-  TextareaHTMLAttributes,
+import {
+  Children,
+  isValidElement,
+  type ButtonHTMLAttributes,
+  type CSSProperties,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
 } from 'react'
 import { Link } from 'wouter'
 import { formatINR } from '../domain/money'
@@ -196,4 +199,73 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
 
 export function Loading() {
   return <div className="py-16 text-center text-[15px] text-muted">Loading…</div>
+}
+
+const textOf = (node: ReactNode): string =>
+  Children.toArray(node)
+    .map((c) =>
+      typeof c === 'string' || typeof c === 'number'
+        ? String(c)
+        : isValidElement(c)
+          ? textOf((c.props as { children?: ReactNode }).children)
+          : '',
+    )
+    .join('')
+
+/** The visible text of the <option> whose value is selected, looking inside <optgroup>s. */
+function selectedLabel(children: ReactNode, value: unknown): string | undefined {
+  let found: string | undefined
+  Children.forEach(children, (child) => {
+    if (found !== undefined || !isValidElement(child)) return
+    const props = child.props as { value?: unknown; children?: ReactNode }
+    if (child.type === 'option') {
+      if (String(props.value ?? textOf(props.children)) === String(value ?? '')) {
+        found = textOf(props.children)
+      }
+    } else if (props.children) {
+      found = selectedLabel(props.children, value)
+    }
+  })
+  return found
+}
+
+/**
+ * A dropdown that is only as wide as the option you picked, instead of as wide as its longest
+ * option. A real <select> sits invisibly on top of the label, so it stays accessible and still
+ * opens the native picker on a phone.
+ */
+export function FitSelect({
+  className,
+  style,
+  children,
+  ...props
+}: SelectHTMLAttributes<HTMLSelectElement> & { style?: CSSProperties }) {
+  return (
+    <span
+      style={style}
+      className={cx(
+        'relative inline-flex max-w-full items-center gap-1.5 whitespace-nowrap focus-within:ring-2 focus-within:ring-accent',
+        className,
+      )}
+    >
+      <span className="truncate">{selectedLabel(children, props.value)}</span>
+      <svg
+        viewBox="0 0 10 10"
+        width={9}
+        height={9}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        className="shrink-0 opacity-50"
+      >
+        <path d="m2 3.5 3 3 3-3" />
+      </svg>
+      <select {...props} className="absolute inset-0 h-full w-full cursor-pointer opacity-0">
+        {children}
+      </select>
+    </span>
+  )
 }

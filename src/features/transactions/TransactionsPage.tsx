@@ -1,6 +1,14 @@
 import type { ReactNode, SelectHTMLAttributes } from 'react'
 import { Link, useSearchParams } from 'wouter'
-import { Card, EmptyState, Loading, Money, PageHeader, TextInput } from '../../components/ui'
+import {
+  Card,
+  EmptyState,
+  FitSelect,
+  Loading,
+  Money,
+  PageHeader,
+  TextInput,
+} from '../../components/ui'
 import { useAllTransactions, useLookups } from '../../data/hooks'
 import {
   SORT_ORDERS,
@@ -332,22 +340,19 @@ export function TransactionsPage() {
 function Chip({
   active,
   children,
-  className,
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement> & { active: boolean; children: ReactNode }) {
   return (
-    <select
+    <FitSelect
       className={cx(
-        // 16px text: iOS zooms into smaller form controls.
-        'h-9 shrink-0 appearance-none rounded-md border px-3 text-[16px] outline-none focus-visible:border-accent',
+        'h-9 shrink-0 rounded-md border px-3 text-[14.5px]',
         active
           ? 'border-accent bg-accent/10 font-medium text-text'
           : 'border-border bg-surface text-text',
-        className,
       )}
       {...props}
     >
       {children}
-    </select>
+    </FitSelect>
   )
 }

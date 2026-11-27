@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { cx } from '../lib/cx'
+import { FitSelect } from './ui'
 
 /*
  * A flat, Notion-style database table: no card, hairline rows, light column dividers,
@@ -9,7 +10,7 @@ import { cx } from '../lib/cx'
 
 export function Table({ children, minWidth = 760 }: { children: ReactNode; minWidth?: number }) {
   return (
-    <div className="overflow-x-auto border-y border-border bg-surface">
+    <div className="overflow-x-auto border-y border-border">
       <table className="w-full border-collapse text-[14px]" style={{ minWidth }}>
         {children}
       </table>
@@ -99,7 +100,7 @@ export function Tag({
   )
 }
 
-/** A native select dressed as a tag, so it stays accessible and works on a phone. */
+/** A dropdown dressed as a tag; as wide as the chosen value, not its longest option. */
 export function TagSelect({
   color,
   className,
@@ -110,32 +111,13 @@ export function TagSelect({
   children: ReactNode
 } & React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <span className="relative inline-block max-w-full">
-      <select
-        {...props}
-        className={cx(
-          'h-[26px] max-w-[12.5rem] cursor-pointer appearance-none rounded-full py-0 pr-6 pl-2.5 text-[13.5px] text-text outline-none focus:ring-2 focus:ring-accent',
-          className,
-        )}
-        style={{ backgroundColor: tint(color) }}
-      >
-        {children}
-      </select>
-      <svg
-        viewBox="0 0 10 10"
-        width={9}
-        height={9}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 opacity-50"
-      >
-        <path d="m2 3.5 3 3 3-3" />
-      </svg>
-    </span>
+    <FitSelect
+      {...props}
+      className={cx('h-[26px] rounded-full pr-2 pl-2.5 text-[13.5px] text-text', className)}
+      style={{ backgroundColor: tint(color) }}
+    >
+      {children}
+    </FitSelect>
   )
 }
 
