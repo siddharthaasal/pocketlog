@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { Button, Card, EmptyState, Money, TextInput, Select } from '../../components/ui'
+import { EmptyState, Money } from '../../components/ui'
 import { addIgnoredPayee, addStatementEntries } from '../../data/reconcile'
 import { extractPayee, payeeKey } from '../../domain/reconcile'
 import type { Account, Category, Transaction } from '../../domain/types'
-import { formatDayHeading } from '../../lib/dates'
+import { formatShortDate } from '../../lib/dates'
 import { defaultDraft, sameDirectionKey, toEntry, type Draft, type MissingItem } from './plan'
+import { SmallButton, Table, Tag, TagSelect, Td, Th, Tr } from './table'
 
 interface Props {
   items: MissingItem[]
@@ -79,132 +80,156 @@ export function MissingList({ items, transactions, categories, accounts }: Props
 
   const allSelected = selected.size === items.length
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="secondary"
-          className="h-9 text-[14px]"
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <SmallButton
           onClick={() => setSelected(allSelected ? new Set() : new Set(items.map((i) => i.id)))}
         >
-          {allSelected ? 'Clear' : 'Select all'}
-        </Button>
-        <Button
-          className="h-9 text-[14px]"
+          {allSelected ? 'Clear selection' : 'Select all'}
+        </SmallButton>
+        <SmallButton
+          tone="primary"
           disabled={busy || selected.size === 0}
           onClick={() => void add([...selected])}
         >
-          Add {selected.size || ''} selected
-        </Button>
-        <span className="text-[13px] text-muted">
-          Items marked “check” are guesses; they’ll land in your review list.
+          Add {selected.size > 0 ? selected.size : ''} selected
+        </SmallButton>
+        {message && (
+          <span role="status" className="text-[13px] text-muted">
+            {message}
+          </span>
+        )}
+        <span className="ml-auto text-[12px] text-muted">
+          <span className="mr-1 inline-block h-2 w-2 rounded-full bg-amber-500" /> guessed category;
+          it will be added for review
         </span>
       </div>
-      {message && (
-        <p role="status" className="px-1 text-[14px] text-muted">
-          {message}
-        </p>
-      )}
 
-      {items.map((item) => {
-        const draft = draftOf(item)
-        const { row } = item
-        const type = row.direction === 'out' ? 'expense' : 'income'
-        const choices = categories.filter((c) => c.type === type && !c.archived)
-        const others = accounts.filter((a) => !a.archived && a.id !== item.accountId)
-        const payee = extractPayee(row.narration)
-        return (
-          <Card key={item.id} className="space-y-2 px-4 py-3">
-            <div className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                className="mt-1.5 h-4 w-4 accent-accent"
-                aria-label={`Select ${payee}`}
-                checked={selected.has(item.id)}
-                onChange={(e) =>
-                  setSelected((cur) => {
-                    const next = new Set(cur)
-                    if (e.target.checked) next.add(item.id)
-                    else next.delete(item.id)
-                    return next
-                  })
-                }
-              />
-              <div className="min-w-0 flex-1" title={row.narration}>
-                <div className="truncate text-[15px]">{payee}</div>
-                <div className="truncate text-[13px] text-muted">
-                  {formatDayHeading(row.date)} · {accountName(item.accountId)}
-                  {item.pair && ` ↔ ${accountName(item.pair.accountId)} (one transfer)`}
-                  {draft.needsReview && !item.pair && (
-                    <span className="ml-1.5 font-medium text-accent">check</span>
+      <Table minWidth={820}>
+        <thead>
+          <tr>
+            <Th className="w-9" />
+            <Th className="w-20">Date</Th>
+            <Th>Name</Th>
+            <Th className="w-28 text-right">Amount</Th>
+            <Th className="w-52">Category</Th>
+            <Th className="w-24">Account</Th>
+            <Th className="w-36" />
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => {
+            const draft = draftOf(item)
+            const { row } = item
+            const type = row.direction === 'out' ? 'expense' : 'income'
+            const payee = extractPayee(row.narration)
+            const picked = draft.choice.startsWith('cat:')
+              ? categories.find((c) => c.id === draft.choice.slice(4))
+              : undefined
+            const others = accounts.filter((a) => !a.archived && a.id !== item.accountId)
+            return (
+              <Tr key={item.id} selected={selected.has(item.id)}>
+                <Td>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-accent"
+                    aria-label={`Select ${payee}`}
+                    checked={selected.has(item.id)}
+                    onChange={(e) =>
+                      setSelected((cur) => {
+                        const next = new Set(cur)
+                        if (e.target.checked) next.add(item.id)
+                        else next.delete(item.id)
+                        return next
+                      })
+                    }
+                  />
+                </Td>
+                <Td className="whitespace-nowrap text-muted">{formatShortDate(row.date)}</Td>
+                <Td className="max-w-0">
+                  <input
+                    aria-label="Description"
+                    className="-mx-1 block w-full rounded px-1 py-0.5 outline-none focus:bg-bg focus:ring-2 focus:ring-accent"
+                    value={draft.description}
+                    onChange={(e) =>
+                      setOverrides((cur) => ({
+                        ...cur,
+                        [item.id]: { ...cur[item.id], description: e.target.value },
+                      }))
+                    }
+                  />
+                  <div className="truncate text-[12px] text-muted" title={row.narration}>
+                    {item.pair ? `Transfer with ${accountName(item.pair.accountId)}` : payee}
+                  </div>
+                </Td>
+                <Td className="text-right whitespace-nowrap">
+                  <Money
+                    paise={row.direction === 'out' ? -row.amount : row.amount}
+                    signed={row.direction === 'in'}
+                  />
+                </Td>
+                <Td>
+                  <div className="flex items-center gap-1.5">
+                    {draft.needsReview && !item.pair && (
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                        title="Guessed — will be added for review"
+                      />
+                    )}
+                    <TagSelect
+                      aria-label="Category"
+                      color={picked?.color}
+                      value={draft.choice}
+                      onChange={(e) => setChoice(item, e.target.value)}
+                    >
+                      {!draft.choice && <option value="">Choose…</option>}
+                      {!item.pair && (
+                        <optgroup
+                          label={type === 'expense' ? 'Expense categories' : 'Income categories'}
+                        >
+                          {categories
+                            .filter((c) => c.type === type && !c.archived)
+                            .map((c) => (
+                              <option key={c.id} value={`cat:${c.id}`}>
+                                {c.icon} {c.name}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
+                      <optgroup label="Move between your accounts">
+                        {others
+                          .filter((a) => !item.pair || a.id === item.pair.accountId)
+                          .map((a) => (
+                            <option key={a.id} value={`acct:${a.id}`}>
+                              {row.direction === 'out' ? '→ Transfer to' : '← Transfer from'}{' '}
+                              {a.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    </TagSelect>
+                  </div>
+                </Td>
+                <Td>
+                  <Tag>{accountName(item.accountId)}</Tag>
+                </Td>
+                <Td className="text-right whitespace-nowrap">
+                  {!item.pair && (
+                    <SmallButton
+                      title={`Always ignore “${payee}”`}
+                      onClick={() => void addIgnoredPayee(payeeKey(payee))}
+                    >
+                      Ignore
+                    </SmallButton>
                   )}
-                </div>
-              </div>
-              <Money
-                className="shrink-0 whitespace-nowrap"
-                paise={row.direction === 'out' ? -row.amount : row.amount}
-                signed={row.direction === 'in'}
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <TextInput
-                aria-label="Description"
-                className="h-9 min-w-40 flex-1 py-1 text-[14px]"
-                value={draft.description}
-                onChange={(e) =>
-                  setOverrides((cur) => ({
-                    ...cur,
-                    [item.id]: { ...cur[item.id], description: e.target.value },
-                  }))
-                }
-              />
-              <Select
-                aria-label="Category"
-                className="h-9 min-w-40 flex-1 py-1 text-[14px]"
-                value={draft.choice}
-                onChange={(e) => setChoice(item, e.target.value)}
-              >
-                {!draft.choice && <option value="">Choose…</option>}
-                {!item.pair && (
-                  <optgroup label={type === 'expense' ? 'Expense categories' : 'Income categories'}>
-                    {choices.map((c) => (
-                      <option key={c.id} value={`cat:${c.id}`}>
-                        {c.icon} {c.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                <optgroup label="Move between your accounts">
-                  {others
-                    .filter((a) => !item.pair || a.id === item.pair.accountId)
-                    .map((a) => (
-                      <option key={a.id} value={`acct:${a.id}`}>
-                        {row.direction === 'out' ? '→ Transfer to' : '← Transfer from'} {a.name}
-                      </option>
-                    ))}
-                </optgroup>
-              </Select>
-            </div>
-            <div className="flex justify-end gap-1">
-              {!item.pair && (
-                <Button
-                  variant="ghost"
-                  className="h-9 px-3 text-[14px]"
-                  onClick={() => void addIgnoredPayee(payeeKey(payee))}
-                >
-                  Always ignore “{payee.length > 18 ? `${payee.slice(0, 18)}…` : payee}”
-                </Button>
-              )}
-              <Button
-                className="h-9 px-4 text-[14px]"
-                disabled={busy}
-                onClick={() => void add([item.id])}
-              >
-                Add
-              </Button>
-            </div>
-          </Card>
-        )
-      })}
+                  <SmallButton tone="primary" disabled={busy} onClick={() => void add([item.id])}>
+                    Add
+                  </SmallButton>
+                </Td>
+              </Tr>
+            )
+          })}
+        </tbody>
+      </Table>
     </div>
   )
 }

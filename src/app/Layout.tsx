@@ -53,7 +53,12 @@ export function Layout({ children }: { children: ReactNode }) {
         ))}
       </aside>
 
-      <main className="mx-auto w-full max-w-3xl px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:pt-8 md:pb-12">
+      <main
+        className={cx(
+          'mx-auto w-full min-w-0 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:pt-8 md:pb-12',
+          location.startsWith('/reconcile') ? 'max-w-6xl' : 'max-w-3xl',
+        )}
+      >
         {children}
       </main>
 

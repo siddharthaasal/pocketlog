@@ -3,14 +3,11 @@ import { Button, Card, Field, Loading, PageHeader, Segmented, Select } from '../
 import { readStatementFile } from '../../data/statementFile'
 import { useAccounts, useAllTransactions, useCategories } from '../../data/hooks'
 import { linkTransactions, useIgnoredPayees } from '../../data/reconcile'
-import { fromISODate } from '../../lib/dates'
+import { formatShortDate } from '../../lib/dates'
 import { newId } from '../../lib/ids'
 import { ConflictsList, ExtraList, IgnoredList, MatchedList } from './sections'
 import { MissingList } from './MissingList'
 import { buildPlan, guessAccount, type LoadedStatement } from './plan'
-
-const shortDate = (iso: string) =>
-  fromISODate(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 
 type Tab = 'missing' | 'conflicts' | 'matched' | 'extra'
 
@@ -66,75 +63,82 @@ export function ReconcilePage() {
     <>
       <PageHeader title="Reconcile" />
       <div className="space-y-6">
-        <Card className="space-y-3 p-5">
-          <p className="text-[15px]">
-            Add your bank statement (.xls, .xlsx or .csv). PocketLog compares it with what you’ve
-            logged, flags amounts that differ, and lets you add what’s missing. The file is read on
-            this device and never uploaded.
-          </p>
-          <label
-            className={`flex h-12 cursor-pointer items-center justify-center rounded-xl bg-accent text-[15px] font-medium text-accent-fg hover:opacity-90 ${reading ? 'pointer-events-none opacity-40' : ''}`}
-          >
-            {reading ? 'Reading…' : files.length > 0 ? 'Add another statement' : 'Choose statement'}
-            <input
-              type="file"
-              multiple
-              accept=".xls,.xlsx,.csv,.txt,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
-              className="sr-only"
-              onChange={(e) => void onFiles(e)}
-            />
-          </label>
-          {problems.map((p) => (
-            <p key={p} role="alert" className="text-[14px] text-negative">
-              {p}
+        <div className="max-w-3xl space-y-6">
+          <Card className="space-y-3 p-5">
+            <p className="text-[15px]">
+              Add your bank statement (.xls, .xlsx or .csv). PocketLog compares it with what you’ve
+              logged, flags amounts that differ, and lets you add what’s missing. The file is read
+              on this device and never uploaded.
             </p>
-          ))}
-        </Card>
-
-        {files.map((f) => (
-          <Card key={f.id} className="space-y-3 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="truncate text-[15px] font-medium">{f.name}</div>
-                <div className="text-[13px] text-muted">
-                  {f.statement.rows.length} transactions · {shortDate(f.statement.from)} to{' '}
-                  {shortDate(f.statement.to)}
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                className="h-9 px-3 text-[14px]"
-                onClick={() => setFiles((cur) => cur.filter((x) => x.id !== f.id))}
-              >
-                Remove
-              </Button>
-            </div>
-            <Field label="This statement is for">
-              <Select
-                value={f.accountId}
-                onChange={(e) =>
-                  setFiles((cur) =>
-                    cur.map((x) => (x.id === f.id ? { ...x, accountId: e.target.value } : x)),
-                  )
-                }
-              >
-                {!f.accountId && <option value="">Choose an account…</option>}
-                {accounts
-                  .filter((a) => !a.archived || a.id === f.accountId)
-                  .map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-              </Select>
-            </Field>
-            {!f.accountId && (
-              <p className="px-1 text-[13px] text-negative">
-                Couldn’t tell which account this is. Choose one to compare it.
+            <label
+              className={`flex h-12 cursor-pointer items-center justify-center rounded-xl bg-accent text-[15px] font-medium text-accent-fg hover:opacity-90 ${reading ? 'pointer-events-none opacity-40' : ''}`}
+            >
+              {reading
+                ? 'Reading…'
+                : files.length > 0
+                  ? 'Add another statement'
+                  : 'Choose statement'}
+              <input
+                type="file"
+                multiple
+                accept=".xls,.xlsx,.csv,.txt,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+                className="sr-only"
+                onChange={(e) => void onFiles(e)}
+              />
+            </label>
+            {problems.map((p) => (
+              <p key={p} role="alert" className="text-[14px] text-negative">
+                {p}
               </p>
-            )}
+            ))}
           </Card>
-        ))}
+
+          {files.map((f) => (
+            <Card key={f.id} className="space-y-3 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-[15px] font-medium">{f.name}</div>
+                  <div className="text-[13px] text-muted">
+                    {f.statement.rows.length} transactions ·{' '}
+                    {formatShortDate(f.statement.from, true)} to{' '}
+                    {formatShortDate(f.statement.to, true)}
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  className="h-9 px-3 text-[14px]"
+                  onClick={() => setFiles((cur) => cur.filter((x) => x.id !== f.id))}
+                >
+                  Remove
+                </Button>
+              </div>
+              <Field label="This statement is for">
+                <Select
+                  value={f.accountId}
+                  onChange={(e) =>
+                    setFiles((cur) =>
+                      cur.map((x) => (x.id === f.id ? { ...x, accountId: e.target.value } : x)),
+                    )
+                  }
+                >
+                  {!f.accountId && <option value="">Choose an account…</option>}
+                  {accounts
+                    .filter((a) => !a.archived || a.id === f.accountId)
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                </Select>
+              </Field>
+              {!f.accountId && (
+                <p className="px-1 text-[13px] text-negative">
+                  Couldn’t tell which account this is. Choose one to compare it.
+                </p>
+              )}
+            </Card>
+          ))}
+        </div>
 
         {files.length > 0 && (
           <section className="space-y-4">
@@ -143,16 +147,18 @@ export function ReconcilePage() {
               {plan.conflicts.length} with a different amount, {plan.missing.length} missing
               {plan.ignored.length > 0 ? `, ${plan.ignored.length} ignored as bank noise` : ''}.
             </p>
-            <Segmented<Tab>
-              value={tab}
-              onChange={setTab}
-              options={[
-                { value: 'missing', label: `Missing ${plan.missing.length}` },
-                { value: 'conflicts', label: `Differ ${plan.conflicts.length}` },
-                { value: 'matched', label: `Matched ${plan.matched.length}` },
-                { value: 'extra', label: `Extra ${plan.extra.length}` },
-              ]}
-            />
+            <div className="max-w-xl">
+              <Segmented<Tab>
+                value={tab}
+                onChange={setTab}
+                options={[
+                  { value: 'missing', label: `Missing ${plan.missing.length}` },
+                  { value: 'conflicts', label: `Differ ${plan.conflicts.length}` },
+                  { value: 'matched', label: `Matched ${plan.matched.length}` },
+                  { value: 'extra', label: `Extra ${plan.extra.length}` },
+                ]}
+              />
+            </div>
 
             {tab === 'missing' && (
               <MissingList
@@ -173,6 +179,7 @@ export function ReconcilePage() {
             {tab === 'matched' && (
               <MatchedList
                 matched={plan.matched}
+                categories={categories}
                 accountName={accountName}
                 unlinked={unlinked.length}
                 onRemember={() =>
@@ -180,7 +187,9 @@ export function ReconcilePage() {
                 }
               />
             )}
-            {tab === 'extra' && <ExtraList extra={plan.extra} accounts={accounts} />}
+            {tab === 'extra' && (
+              <ExtraList extra={plan.extra} categories={categories} accounts={accounts} />
+            )}
 
             {plan.ignored.length > 0 && <IgnoredList ignored={plan.ignored} />}
           </section>
