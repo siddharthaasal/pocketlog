@@ -1,5 +1,5 @@
 import { useMemo, useState, type ChangeEvent } from 'react'
-import { Button, Card, Field, Loading, PageHeader, Segmented, Select } from '../../components/ui'
+import { Button, Card, Field, Loading, PageHeader, Select } from '../../components/ui'
 import { readStatementFile } from '../../data/statementFile'
 import { useAccounts, useAllTransactions, useCategories } from '../../data/hooks'
 import { linkTransactions, useIgnoredPayees } from '../../data/reconcile'
@@ -8,6 +8,7 @@ import { newId } from '../../lib/ids'
 import { ConflictsList, ExtraList, IgnoredList, MatchedList } from './sections'
 import { MissingList } from './MissingList'
 import { buildPlan, guessAccount, type LoadedStatement } from './plan'
+import { ViewTabs } from './table'
 
 type Tab = 'missing' | 'conflicts' | 'matched' | 'extra'
 
@@ -147,18 +148,16 @@ export function ReconcilePage() {
               {plan.conflicts.length} with a different amount, {plan.missing.length} missing
               {plan.ignored.length > 0 ? `, ${plan.ignored.length} ignored as bank noise` : ''}.
             </p>
-            <div className="max-w-xl">
-              <Segmented<Tab>
-                value={tab}
-                onChange={setTab}
-                options={[
-                  { value: 'missing', label: `Missing ${plan.missing.length}` },
-                  { value: 'conflicts', label: `Differ ${plan.conflicts.length}` },
-                  { value: 'matched', label: `Matched ${plan.matched.length}` },
-                  { value: 'extra', label: `Extra ${plan.extra.length}` },
-                ]}
-              />
-            </div>
+            <ViewTabs<Tab>
+              value={tab}
+              onChange={setTab}
+              options={[
+                { value: 'missing', label: 'Missing', count: plan.missing.length },
+                { value: 'conflicts', label: 'Differ', count: plan.conflicts.length },
+                { value: 'matched', label: 'Matched', count: plan.matched.length },
+                { value: 'extra', label: 'Extra', count: plan.extra.length },
+              ]}
+            />
 
             {tab === 'missing' && (
               <MissingList
@@ -173,7 +172,6 @@ export function ReconcilePage() {
                 conflicts={plan.conflicts}
                 categories={categories}
                 accounts={accounts}
-                transactions={transactions}
               />
             )}
             {tab === 'matched' && (

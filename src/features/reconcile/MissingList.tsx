@@ -5,7 +5,20 @@ import { extractPayee, payeeKey } from '../../domain/reconcile'
 import type { Account, Category, Transaction } from '../../domain/types'
 import { formatShortDate } from '../../lib/dates'
 import { defaultDraft, sameDirectionKey, toEntry, type Draft, type MissingItem } from './plan'
-import { SmallButton, Table, Tag, TagSelect, Td, Th, Tr } from './table'
+import {
+  CalendarGlyph,
+  NumberGlyph,
+  SelectGlyph,
+  SmallButton,
+  Dot,
+  Table,
+  Tag,
+  TagSelect,
+  TextGlyph,
+  Td,
+  Th,
+  Tr,
+} from './table'
 
 interface Props {
   items: MissingItem[]
@@ -109,12 +122,20 @@ export function MissingList({ items, transactions, categories, accounts }: Props
         <thead>
           <tr>
             <Th className="w-9" />
-            <Th className="w-20">Date</Th>
-            <Th>Name</Th>
-            <Th className="w-28 text-right">Amount</Th>
-            <Th className="w-52">Category</Th>
-            <Th className="w-24">Account</Th>
-            <Th className="w-36" />
+            <Th className="w-24" icon={<CalendarGlyph />}>
+              Date
+            </Th>
+            <Th icon={<TextGlyph />}>Name</Th>
+            <Th className="w-32" icon={<NumberGlyph />}>
+              Amount
+            </Th>
+            <Th className="w-52" icon={<SelectGlyph />}>
+              Category
+            </Th>
+            <Th className="w-32" icon={<SelectGlyph />}>
+              Account
+            </Th>
+            <Th className="w-28" />
           </tr>
         </thead>
         <tbody>
@@ -149,7 +170,8 @@ export function MissingList({ items, transactions, categories, accounts }: Props
                 <Td className="max-w-0">
                   <input
                     aria-label="Description"
-                    className="-mx-1 block w-full rounded px-1 py-0.5 outline-none focus:bg-bg focus:ring-2 focus:ring-accent"
+                    title={row.narration}
+                    className="-mx-1 block w-[calc(100%+0.5rem)] rounded px-1 py-0.5 text-[14px] outline-none focus:bg-bg focus:ring-2 focus:ring-accent"
                     value={draft.description}
                     onChange={(e) =>
                       setOverrides((cur) => ({
@@ -158,11 +180,8 @@ export function MissingList({ items, transactions, categories, accounts }: Props
                       }))
                     }
                   />
-                  <div className="truncate text-[12px] text-muted" title={row.narration}>
-                    {item.pair ? `Transfer with ${accountName(item.pair.accountId)}` : payee}
-                  </div>
                 </Td>
-                <Td className="text-right whitespace-nowrap">
+                <Td className="text-right">
                   <Money
                     paise={row.direction === 'out' ? -row.amount : row.amount}
                     signed={row.direction === 'in'}
@@ -210,7 +229,10 @@ export function MissingList({ items, transactions, categories, accounts }: Props
                   </div>
                 </Td>
                 <Td>
-                  <Tag>{accountName(item.accountId)}</Tag>
+                  <Tag>
+                    <Dot />
+                    {accountName(item.accountId)}
+                  </Tag>
                 </Td>
                 <Td className="text-right whitespace-nowrap">
                   {!item.pair && (

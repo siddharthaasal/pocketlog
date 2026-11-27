@@ -1,22 +1,29 @@
 import { useState } from 'react'
 import { Link } from 'wouter'
 import { EmptyState, Money } from '../../components/ui'
-import {
-  addStatementEntries,
-  applyStatementAmount,
-  linkTransactions,
-  removeIgnoredPayee,
-} from '../../data/reconcile'
+import { applyStatementAmount, linkTransactions, removeIgnoredPayee } from '../../data/reconcile'
 import { deleteTransaction } from '../../data/repo'
 import { extractPayee, payeeKey, type StatementRow } from '../../domain/reconcile'
 import type { Account, Category, Transaction } from '../../domain/types'
 import { formatShortDate } from '../../lib/dates'
-import { defaultDraft, toEntry, type Plan } from './plan'
-import { SmallButton, Table, Tag, Td, Th, Tr } from './table'
+import type { Plan } from './plan'
+import {
+  CalendarGlyph,
+  Dot,
+  NumberGlyph,
+  SelectGlyph,
+  SmallButton,
+  Table,
+  Tag,
+  TextGlyph,
+  Td,
+  Th,
+  Tr,
+} from './table'
 
 const signed = (t: Pick<Transaction, 'type' | 'amount'>) =>
   t.type === 'expense' ? -t.amount : t.amount
-const amountCell = 'text-right whitespace-nowrap'
+const num = 'text-right'
 
 function CategoryTag({ t, categories }: { t: Transaction; categories: readonly Category[] }) {
   if (t.type === 'transfer') return <Tag>⇄ Transfer</Tag>
@@ -28,98 +35,90 @@ function CategoryTag({ t, categories }: { t: Transaction; categories: readonly C
   )
 }
 
+const AccountTag = ({ name }: { name: string }) => (
+  <Tag>
+    <Dot />
+    {name}
+  </Tag>
+)
+
 export function ConflictsList({
   conflicts,
   categories,
   accounts,
-  transactions,
 }: {
   conflicts: Plan['conflicts']
   categories: Category[]
   accounts: Account[]
-  transactions: Transaction[]
 }) {
-  const [error, setError] = useState<string | null>(null)
   if (conflicts.length === 0) return <EmptyState title="No amount differences. 🎉" />
-
-  async function addAsNew(c: Plan['conflicts'][number]) {
-    const item = { id: c.row.key, accountId: c.accountId, row: c.row }
-    const entry = toEntry(item, defaultDraft(item, transactions, categories))
-    if (!entry) return setError('Pick a category for this one in the Missing tab first.')
-    try {
-      await addStatementEntries([entry])
-    } catch (e) {
-      setError((e as Error).message)
-    }
-  }
-
+  const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? '?'
   return (
     <div className="space-y-2">
       <p className="px-1 text-[13px] text-muted">
-        Same day and a similar payee or amount, but the amounts disagree. Which one is right?
+        Same day and a similar payee or amount, but the amounts disagree. Pick the one that’s right.
       </p>
-      {error && (
-        <p role="alert" className="px-1 text-[13px] text-negative">
-          {error}
-        </p>
-      )}
       <Table minWidth={900}>
         <thead>
           <tr>
-            <Th className="w-20">Date</Th>
-            <Th>Bank says</Th>
-            <Th className="w-28 text-right">Bank</Th>
-            <Th>PocketLog has</Th>
-            <Th className="w-28 text-right">PocketLog</Th>
-            <Th className="w-28 text-right">Gap</Th>
-            <Th className="w-52" />
+            <Th className="w-[4.5rem]" icon={<CalendarGlyph />}>
+              Date
+            </Th>
+            <Th icon={<TextGlyph />}>Bank says</Th>
+            <Th className="w-[6.5rem]" icon={<NumberGlyph />}>
+              Bank
+            </Th>
+            <Th icon={<TextGlyph />}>In PocketLog</Th>
+            <Th className="w-36" icon={<SelectGlyph />}>
+              Category
+            </Th>
+            <Th className="w-[6.5rem]" icon={<NumberGlyph />}>
+              PocketLog
+            </Th>
+            <Th className="w-[4.5rem]" icon={<NumberGlyph />}>
+              Gap
+            </Th>
+            <Th className="w-[16rem]" />
           </tr>
         </thead>
         <tbody>
           {conflicts.map((c) => (
             <Tr key={c.row.key}>
-              <Td className="whitespace-nowrap text-muted">{formatShortDate(c.row.date)}</Td>
+              <Td className="text-muted">{formatShortDate(c.row.date)}</Td>
               <Td className="max-w-0">
-                <div className="truncate" title={c.row.narration}>
+                <span title={`${c.row.narration} · ${accountName(c.accountId)}`}>
                   {extractPayee(c.row.narration)}
-                </div>
-                <div className="text-[12px] text-muted">
-                  {accounts.find((a) => a.id === c.accountId)?.name}
-                </div>
+                </span>
               </Td>
-              <Td className={amountCell}>
+              <Td className={num}>
                 <Money paise={c.row.direction === 'out' ? -c.row.amount : c.row.amount} />
               </Td>
-              <Td className="max-w-0">
-                <div className="truncate">{c.tx.description || c.tx.merchant}</div>
+              <Td className="max-w-0">{c.tx.description || c.tx.merchant}</Td>
+              <Td>
                 <CategoryTag t={c.tx} categories={categories} />
               </Td>
-              <Td className={amountCell}>
+              <Td className={num}>
                 <Money paise={signed(c.tx)} />
               </Td>
-              <Td className={`${amountCell} font-medium text-negative`}>
+              <Td className={`${num} font-medium text-negative`}>
                 {c.difference > 0 ? '+' : '−'}
                 <Money paise={Math.abs(c.difference)} />
               </Td>
-              <Td className="text-right whitespace-nowrap">
+              <Td className="overflow-visible px-1! text-right">
                 <SmallButton
-                  title="These are two different payments: add the bank row as a new entry"
-                  onClick={() => void addAsNew(c)}
-                >
-                  Not the same
-                </SmallButton>
-                <SmallButton
+                  className="px-1!"
                   title="Your amount is right: remember this match and stop flagging it"
                   onClick={() => void linkTransactions([{ id: c.tx.id, bankRef: c.row.key }])}
                 >
-                  Keep mine
+                  Keep PocketLog
                 </SmallButton>
                 <SmallButton
                   tone="primary"
-                  title="Change your entry to the bank’s amount"
+                  className="px-1!"
+                  title="Change your entry to the amount on the bank statement"
                   onClick={() => void applyStatementAmount(c.tx.id, c.row.amount, c.row.key)}
                 >
-                  Use bank
+                  Use from bank statement
                 </SmallButton>
               </Td>
             </Tr>
@@ -157,36 +156,47 @@ export function MatchedList({
       <Table minWidth={720}>
         <thead>
           <tr>
-            <Th className="w-20">Date</Th>
-            <Th>Name</Th>
-            <Th className="w-28 text-right">Amount</Th>
-            <Th className="w-52">Category</Th>
-            <Th className="w-24">Account</Th>
-            <Th className="w-8" />
+            <Th className="w-24" icon={<CalendarGlyph />}>
+              Date
+            </Th>
+            <Th icon={<TextGlyph />}>Name</Th>
+            <Th className="w-32" icon={<NumberGlyph />}>
+              Amount
+            </Th>
+            <Th className="w-56" icon={<SelectGlyph />}>
+              Category
+            </Th>
+            <Th className="w-32" icon={<SelectGlyph />}>
+              Account
+            </Th>
+            <Th className="w-10" />
           </tr>
         </thead>
         <tbody>
           {matched.map((m) => (
             <Tr key={`${m.row.key}-${m.tx.id}`}>
-              <Td className="whitespace-nowrap text-muted">{formatShortDate(m.row.date)}</Td>
+              <Td className="text-muted">{formatShortDate(m.row.date)}</Td>
               <Td className="max-w-0">
-                <div className="truncate">{m.tx.description || extractPayee(m.row.narration)}</div>
-                {m.row.date !== m.tx.date && (
-                  <div className="text-[12px] text-muted">
-                    logged on {formatShortDate(m.tx.date)}
-                  </div>
-                )}
+                <span
+                  title={
+                    m.row.date !== m.tx.date
+                      ? `Bank: ${formatShortDate(m.row.date)} · logged on ${formatShortDate(m.tx.date)}`
+                      : m.row.narration
+                  }
+                >
+                  {m.tx.description || extractPayee(m.row.narration)}
+                </span>
               </Td>
-              <Td className={amountCell}>
+              <Td className={num}>
                 <Money paise={m.row.direction === 'out' ? -m.row.amount : m.row.amount} />
               </Td>
               <Td>
                 <CategoryTag t={m.tx} categories={categories} />
               </Td>
               <Td>
-                <Tag>{accountName(m.accountId)}</Tag>
+                <AccountTag name={accountName(m.accountId)} />
               </Td>
-              <Td className="text-positive" aria-label="Matched">
+              <Td className="text-center text-positive" aria-label="Matched">
                 ✓
               </Td>
             </Tr>
@@ -218,34 +228,40 @@ export function ExtraList({
       <Table minWidth={720}>
         <thead>
           <tr>
-            <Th className="w-20">Date</Th>
-            <Th>Name</Th>
-            <Th className="w-28 text-right">Amount</Th>
-            <Th className="w-52">Category</Th>
-            <Th className="w-24">Account</Th>
+            <Th className="w-24" icon={<CalendarGlyph />}>
+              Date
+            </Th>
+            <Th icon={<TextGlyph />}>Name</Th>
+            <Th className="w-32" icon={<NumberGlyph />}>
+              Amount
+            </Th>
+            <Th className="w-56" icon={<SelectGlyph />}>
+              Category
+            </Th>
+            <Th className="w-32" icon={<SelectGlyph />}>
+              Account
+            </Th>
             <Th className="w-32" />
           </tr>
         </thead>
         <tbody>
           {extra.map((t) => (
             <Tr key={t.id}>
-              <Td className="whitespace-nowrap text-muted">{formatShortDate(t.date)}</Td>
-              <Td className="max-w-0">
-                <div className="truncate">{t.description || t.merchant || '—'}</div>
-              </Td>
-              <Td className={amountCell}>
+              <Td className="text-muted">{formatShortDate(t.date)}</Td>
+              <Td className="max-w-0">{t.description || t.merchant || '—'}</Td>
+              <Td className={num}>
                 <Money paise={signed(t)} />
               </Td>
               <Td>
                 <CategoryTag t={t} categories={categories} />
               </Td>
               <Td>
-                <Tag>{accounts.find((a) => a.id === t.accountId)?.name ?? '?'}</Tag>
+                <AccountTag name={accounts.find((a) => a.id === t.accountId)?.name ?? '?'} />
               </Td>
-              <Td className="text-right whitespace-nowrap">
+              <Td className="text-right">
                 <Link
                   href={`/transactions/${t.id}`}
-                  className="inline-flex h-7 items-center rounded-md px-2 text-[13px] text-accent hover:bg-surface-2"
+                  className="inline-flex h-7 items-center rounded-md px-2 text-[13.5px] text-muted hover:bg-surface-2 hover:text-text"
                 >
                   Edit
                 </Link>
@@ -285,22 +301,24 @@ export function IgnoredList({ ignored }: { ignored: (StatementRow & { accountId:
         <Table minWidth={560}>
           <thead>
             <tr>
-              <Th className="w-20">Date</Th>
-              <Th>Name</Th>
-              <Th className="w-28 text-right">Amount</Th>
+              <Th className="w-24" icon={<CalendarGlyph />}>
+                Date
+              </Th>
+              <Th icon={<TextGlyph />}>Name</Th>
+              <Th className="w-32" icon={<NumberGlyph />}>
+                Amount
+              </Th>
               <Th className="w-36" />
             </tr>
           </thead>
           <tbody>
             {ignored.map((r) => (
               <Tr key={r.key}>
-                <Td className="whitespace-nowrap text-muted">{formatShortDate(r.date)}</Td>
+                <Td className="text-muted">{formatShortDate(r.date)}</Td>
                 <Td className="max-w-0">
-                  <div className="truncate" title={r.narration}>
-                    {extractPayee(r.narration)}
-                  </div>
+                  <span title={r.narration}>{extractPayee(r.narration)}</span>
                 </Td>
-                <Td className={amountCell}>
+                <Td className={num}>
                   <Money paise={r.direction === 'out' ? -r.amount : r.amount} />
                 </Td>
                 <Td className="text-right">
