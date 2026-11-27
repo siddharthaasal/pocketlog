@@ -87,6 +87,8 @@ export const transactionSchema = z
     currency: z.literal('INR'),
     source: z.enum(TRANSACTION_SOURCES),
     needsReview: z.boolean(),
+    /** Identifies the bank-statement row this came from, so reconciling never duplicates it. */
+    bankRef: z.string().max(100).optional(),
   })
   .superRefine(refineTransaction)
 

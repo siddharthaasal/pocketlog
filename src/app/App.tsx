@@ -4,6 +4,7 @@ import { DashboardPage } from '../features/dashboard/DashboardPage'
 import { BackupPage } from '../features/data/BackupPage'
 import { PrivacyPage } from '../features/data/PrivacyPage'
 import { InboxPage } from '../features/inbox/InboxPage'
+import { ReconcilePage } from '../features/reconcile/ReconcilePage'
 import { AccountEditPage } from '../features/settings/AccountEditPage'
 import { AccountsPage } from '../features/settings/AccountsPage'
 import { CategoriesPage } from '../features/settings/CategoriesPage'
@@ -23,6 +24,7 @@ export function App() {
         <Route path="/transactions/:id" component={TransactionFormPage} />
         <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/inbox" component={InboxPage} />
+        <Route path="/reconcile" component={ReconcilePage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/settings/data" component={BackupPage} />
         <Route path="/settings/privacy" component={PrivacyPage} />

@@ -1,6 +1,13 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'wouter'
-import { ChartIcon, HomeIcon, ListIcon, PlusIcon, SettingsIcon } from '../components/icons'
+import {
+  ChartIcon,
+  HomeIcon,
+  ListIcon,
+  PlusIcon,
+  ReconcileIcon,
+  SettingsIcon,
+} from '../components/icons'
 import { cx } from '../lib/cx'
 import { UpdatePrompt } from './UpdatePrompt'
 
@@ -8,6 +15,7 @@ const NAV = [
   { href: '/', label: 'Home', icon: HomeIcon },
   { href: '/transactions', label: 'Transactions', icon: ListIcon },
   { href: '/analytics', label: 'Analytics', icon: ChartIcon },
+  { href: '/reconcile', label: 'Reconcile', icon: ReconcileIcon },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ] as const
 
@@ -45,7 +53,12 @@ export function Layout({ children }: { children: ReactNode }) {
         ))}
       </aside>
 
-      <main className="mx-auto w-full max-w-3xl px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:pt-8 md:pb-12">
+      <main
+        className={cx(
+          'mx-auto w-full min-w-0 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] md:pt-8 md:pb-12',
+          location.startsWith('/reconcile') ? 'max-w-6xl md:px-5' : 'max-w-3xl md:px-8',
+        )}
+      >
         {children}
       </main>
 

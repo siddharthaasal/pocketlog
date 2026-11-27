@@ -59,3 +59,12 @@ export function formatDayHeading(date: string, today = todayISO()): string {
     ...(sameYear ? {} : { year: 'numeric' }),
   })
 }
+
+/** "23 Nov", or "23 Nov 2026" with the year. Never relative ("Today"), so tables stay scannable. */
+export function formatShortDate(date: string, withYear = false): string {
+  return fromISODate(date).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    ...(withYear && { year: 'numeric' }),
+  })
+}
