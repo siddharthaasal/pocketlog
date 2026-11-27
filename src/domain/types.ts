@@ -327,8 +327,8 @@ export const netWorthSnapshotSchema = z.object({
   ...recordMeta,
   /** `id` equals `month`, so there is one snapshot per month and merges stay simple. */
   month,
-  /** Paise per bucket. Liabilities are positive numbers. */
-  lines: z.record(z.enum(NET_WORTH_BUCKETS), paise.nonnegative()),
+  /** Paise per bucket. Liabilities are positive numbers; savings can be negative (overdraft). */
+  lines: z.record(z.enum(NET_WORTH_BUCKETS), paise),
   totalInvested: paise.nonnegative(),
   closedAt: timestamp,
 })

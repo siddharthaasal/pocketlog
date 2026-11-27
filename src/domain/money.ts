@@ -11,6 +11,14 @@ export function parseRupees(input: string): number | null {
   return Number.isSafeInteger(paise) ? paise : null
 }
 
+/** Like `parseRupees`, but a leading minus is allowed: "-500" → -50000. */
+export function parseSignedRupees(input: string): number | null {
+  const trimmed = input.trim()
+  const negative = /^[-−]/.test(trimmed)
+  const paise = parseRupees(negative ? trimmed.slice(1) : trimmed)
+  return paise === null ? null : negative ? -paise : paise
+}
+
 /** Formats paise for an editable input: 35000 → "350", 35050 → "350.50". */
 export function paiseToInput(paise: number): string {
   const abs = Math.abs(paise)

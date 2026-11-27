@@ -15,6 +15,8 @@ import {
 } from './subscriptions'
 import { suggestRecurring } from '../domain/recurring'
 import { markRenewed, savePolicy } from './policies'
+import { reopenMonth, saveSnapshot } from './networth'
+import { emptyLines } from '../domain/networth'
 import { saveHolding, saveValuations, setHoldingArchived } from './investments'
 import { monthRowId, removeRecord, saveAccountBalance, saveRecord } from './records'
 import { addTransaction, updateTransaction } from './repo'
@@ -316,5 +318,32 @@ describe('policies data', () => {
     await expect(
       savePolicy({ name: 'x', kind: 'health', insurer: 'y', premium: 0, frequency: 'yearly' }),
     ).rejects.toThrow()
+  })
+})
+
+describe('net worth snapshots', () => {
+  const lines = { ...emptyLines(), savings: 100_000_00, home_loan: 40_000_00 }
+
+  it('freezes a month and replaces it when closed again', async () => {
+    await saveSnapshot('2026-11', lines, 5_000_00)
+    await saveSnapshot('2026-11', { ...lines, savings: 120_000_00 }, 5_000_00)
+    const rows = await db.snapshots.toArray()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ id: '2026-11', month: '2026-11' })
+    expect(rows[0]!.lines.savings).toBe(120_000_00)
+  })
+
+  it('reopens a month', async () => {
+    await saveSnapshot('2026-11', lines, 0)
+    await reopenMonth('2026-11')
+    expect((await db.snapshots.get('2026-11'))?.deletedAt).toBeDefined()
+  })
+
+  it('survives a backup round trip', async () => {
+    await saveSnapshot('2026-11', lines, 0)
+    const result = await readBackupText(await exportBackupText())
+    if (result.status !== 'ok') throw new Error(result.status)
+    expect(result.invalid).toEqual([])
+    expect(result.backup.data.snapshots).toHaveLength(1)
   })
 })
