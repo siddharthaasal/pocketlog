@@ -235,3 +235,69 @@ describe('isNoise', () => {
     expect(isNoise(payee, [payeeKey('Vendolite India 12')])).toBe(true)
   })
 })
+
+describe('reconcile across accounts (swept emails)', () => {
+  it('matches an expense on any account', () => {
+    const r = row({ narration: 'Swiggy' })
+    const onCard = makeTransaction({ accountId: 'acc-credit-card' })
+    const res = reconcile([r], [onCard], null)
+    expect(res.matched).toEqual([{ row: r, tx: onCard, viaRef: false }])
+  })
+
+  it('ignores income and transfers', () => {
+    const r = row()
+    const res = reconcile(
+      [r],
+      [
+        makeTransaction({ type: 'income', categoryId: 'cat-salary' }),
+        makeTransfer('acc-hdfc', 'acc-cash', 10_000, { date: '2026-11-10' }),
+      ],
+      null,
+    )
+    expect(res.matched).toEqual([])
+    expect(res.missing).toEqual([r])
+  })
+
+  it('honours emailRef links and leaves bankRef alone', () => {
+    const r = row({ key: 'email-1', amount: 99_999 })
+    const linked = makeTransaction({ amount: 10_000, emailRef: 'email-1', bankRef: 'stmt-9' })
+    const viaEmailRef = reconcile([r], [linked], null, { refField: 'emailRef' })
+    expect(viaEmailRef.matched).toEqual([{ row: r, tx: linked, viaRef: true }])
+    // The same link is invisible when matching bank rows by bankRef.
+    const viaBankRef = reconcile([r], [linked], null)
+    expect(viaBankRef.matched).toEqual([])
+  })
+
+  it('reports an amount that disagrees as a conflict', () => {
+    const r = row({ narration: 'Swiggy', amount: 45_000 })
+    const t = makeTransaction({ amount: 44_000, description: 'Swiggy order' })
+    const res = reconcile([r], [t], null)
+    expect(res.conflicts).toEqual([{ row: r, tx: t, difference: 1_000 }])
+  })
+
+  it('does not call an entry extra when it already has an email link', () => {
+    const r = row({ date: '2026-11-12', amount: 5_000 })
+    const done = makeTransaction({ date: '2026-11-11', amount: 7_000, emailRef: 'email-0' })
+    const res = reconcile([r, row({ date: '2026-11-10', amount: 1 })], [done], null, {
+      refField: 'emailRef',
+    })
+    expect(res.extra).toEqual([])
+  })
+})
+
+describe('conflictNeedsPayee', () => {
+  it('does not pair a close amount with an unrelated payee', () => {
+    const r = row({ narration: 'Uber', amount: 21_250 })
+    const t = makeTransaction({ amount: 21_600, description: 'Swiggy order' })
+    expect(reconcile([r], [t], null, { conflictNeedsPayee: true }).conflicts).toEqual([])
+    // Without the option, a close amount is enough (bank statements).
+    expect(reconcile([r], [t], null).conflicts).toHaveLength(1)
+  })
+
+  it('still pairs the same payee with a different amount', () => {
+    const r = row({ narration: 'Swiggy', amount: 27_000 })
+    const t = makeTransaction({ amount: 26_800, description: 'Swiggy order' })
+    const res = reconcile([r], [t], null, { conflictNeedsPayee: true })
+    expect(res.conflicts).toEqual([{ row: r, tx: t, difference: 200 }])
+  })
+})

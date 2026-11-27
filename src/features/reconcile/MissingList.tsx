@@ -4,7 +4,14 @@ import { addIgnoredPayee, addStatementEntries } from '../../data/reconcile'
 import { extractPayee, payeeKey } from '../../domain/reconcile'
 import type { Account, Category, Transaction } from '../../domain/types'
 import { formatShortDate } from '../../lib/dates'
-import { defaultDraft, sameDirectionKey, toEntry, type Draft, type MissingItem } from './plan'
+import {
+  defaultDraft,
+  sameDirectionKey,
+  toEntry,
+  type Draft,
+  type Layer,
+  type MissingItem,
+} from './plan'
 import {
   CalendarGlyph,
   NumberGlyph,
@@ -25,11 +32,12 @@ interface Props {
   transactions: Transaction[]
   categories: Category[]
   accounts: Account[]
+  layer?: Layer
 }
 
 type Override = Partial<Draft> & { touched?: boolean }
 
-export function MissingList({ items, transactions, categories, accounts }: Props) {
+export function MissingList({ items, transactions, categories, accounts, layer = 'bank' }: Props) {
   const [overrides, setOverrides] = useState<Record<string, Override>>({})
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [message, setMessage] = useState<string | null>(null)
@@ -68,7 +76,7 @@ export function MissingList({ items, transactions, categories, accounts }: Props
     const entries = []
     for (const id of ids) {
       const item = items.find((i) => i.id === id)!
-      const entry = toEntry(item, draftOf(item))
+      const entry = toEntry(item, draftOf(item), layer)
       if (!entry) {
         setMessage(`Choose a category for “${extractPayee(item.row.narration)}” first.`)
         return
@@ -88,7 +96,15 @@ export function MissingList({ items, transactions, categories, accounts }: Props
   }
 
   if (items.length === 0) {
-    return <EmptyState title="Nothing missing. Every statement row is already in PocketLog. 🎉" />
+    return (
+      <EmptyState
+        title={
+          layer === 'email'
+            ? 'Nothing missing. Every emailed spend is already in PocketLog. 🎉'
+            : 'Nothing missing. Every statement row is already in PocketLog. 🎉'
+        }
+      />
+    )
   }
 
   const allSelected = selected.size === items.length
@@ -147,7 +163,8 @@ export function MissingList({ items, transactions, categories, accounts }: Props
             const picked = draft.choice.startsWith('cat:')
               ? categories.find((c) => c.id === draft.choice.slice(4))
               : undefined
-            const others = accounts.filter((a) => !a.archived && a.id !== item.accountId)
+            const accountId = draft.accountId ?? item.accountId
+            const others = accounts.filter((a) => !a.archived && a.id !== accountId)
             return (
               <Tr key={item.id} selected={selected.has(item.id)}>
                 <Td>
@@ -215,24 +232,47 @@ export function MissingList({ items, transactions, categories, accounts }: Props
                             ))}
                         </optgroup>
                       )}
-                      <optgroup label="Move between your accounts">
-                        {others
-                          .filter((a) => !item.pair || a.id === item.pair.accountId)
-                          .map((a) => (
-                            <option key={a.id} value={`acct:${a.id}`}>
-                              {row.direction === 'out' ? '→ Transfer to' : '← Transfer from'}{' '}
-                              {a.name}
-                            </option>
-                          ))}
-                      </optgroup>
+                      {layer === 'bank' && (
+                        <optgroup label="Move between your accounts">
+                          {others
+                            .filter((a) => !item.pair || a.id === item.pair.accountId)
+                            .map((a) => (
+                              <option key={a.id} value={`acct:${a.id}`}>
+                                {row.direction === 'out' ? '→ Transfer to' : '← Transfer from'}{' '}
+                                {a.name}
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
                     </TagSelect>
                   </div>
                 </Td>
                 <Td>
-                  <Tag>
-                    <Dot />
-                    {accountName(item.accountId)}
-                  </Tag>
+                  {layer === 'email' ? (
+                    <TagSelect
+                      aria-label="Account"
+                      value={accountId}
+                      onChange={(e) =>
+                        setOverrides((cur) => ({
+                          ...cur,
+                          [item.id]: { ...cur[item.id], accountId: e.target.value },
+                        }))
+                      }
+                    >
+                      {accounts
+                        .filter((a) => !a.archived || a.id === accountId)
+                        .map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                    </TagSelect>
+                  ) : (
+                    <Tag>
+                      <Dot />
+                      {accountName(item.accountId)}
+                    </Tag>
+                  )}
                 </Td>
                 <Td className="text-right whitespace-nowrap">
                   {!item.pair && (

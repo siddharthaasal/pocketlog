@@ -38,6 +38,17 @@ export interface ReconcileResult {
 export interface ReconcileOptions {
   /** How many days apart an entry and a bank row may be and still be the same payment. */
   dateWindow?: number
+  /**
+   * Which remembered link to honour. Bank rows use `bankRef`; swept emails use `emailRef`, so an
+   * entry can be confirmed by both without one overwriting the other.
+   */
+  refField?: 'bankRef' | 'emailRef'
+  /**
+   * Call an amount mismatch a conflict only when the payee also matches. Bank narrations are
+   * cryptic, so a close amount is enough for them; an email names the merchant, and across every
+   * account a close amount alone pairs unrelated spends.
+   */
+  conflictNeedsPayee?: boolean
 }
 
 const STOP_WORDS = new Set([
@@ -117,12 +128,15 @@ function assign(pairs: Pair[], rows: Set<StatementRow>, txs: Set<Transaction>): 
  *  3. same direction and dates within the window, but a different amount, when the amount is
  *     close (within ₹1 or 5%) or the payee shares a word: reported as a conflict.
  * Whatever is left is `missing` (statement only) or `extra` (PocketLog only).
+ *
+ * With `accountId` null, rows are matched against expenses on any account. Swept emails use
+ * this: a receipt doesn't say which account paid.
  */
 export function reconcile(
   rows: readonly StatementRow[],
   transactions: readonly Transaction[],
-  accountId: string,
-  { dateWindow = 2 }: ReconcileOptions = {},
+  accountId: string | null,
+  { dateWindow = 2, refField = 'bankRef', conflictNeedsPayee = false }: ReconcileOptions = {},
 ): ReconcileResult {
   const result: ReconcileResult = { matched: [], conflicts: [], missing: [], extra: [] }
   if (rows.length === 0) return result
@@ -133,16 +147,16 @@ export function reconcile(
   const from = addDays(first, -dateWindow)
   const to = addDays(last, dateWindow)
 
+  const side = (t: Transaction) =>
+    accountId === null ? (t.type === 'expense' ? 'out' : null) : sideOf(t, accountId)
   const liveRows = new Set(rows)
   const candidates = new Set(
-    transactions.filter(
-      (t) => !t.deletedAt && t.date >= from && t.date <= to && sideOf(t, accountId) !== null,
-    ),
+    transactions.filter((t) => !t.deletedAt && t.date >= from && t.date <= to && side(t) !== null),
   )
 
   // 1. Remembered links.
   const byRef = new Map<string, Transaction>()
-  for (const t of candidates) if (t.bankRef) byRef.set(t.bankRef, t)
+  for (const t of candidates) if (t[refField]) byRef.set(t[refField]!, t)
   for (const row of rows) {
     const tx = byRef.get(row.key)
     if (tx && candidates.has(tx)) {
@@ -156,7 +170,7 @@ export function reconcile(
   const exact: Pair[] = []
   for (const row of liveRows) {
     for (const tx of candidates) {
-      if (sideOf(tx, accountId) !== row.direction || tx.amount !== row.amount) continue
+      if (side(tx) !== row.direction || tx.amount !== row.amount) continue
       const gap = dayGap(row.date, tx.date)
       if (gap > dateWindow) continue
       exact.push({ row, tx, score: 100 - gap * 10 + (sharesWord(row, tx) ? 5 : 0) })
@@ -170,13 +184,14 @@ export function reconcile(
   const near: Pair[] = []
   for (const row of liveRows) {
     for (const tx of candidates) {
-      if (sideOf(tx, accountId) !== row.direction) continue
+      if (side(tx) !== row.direction) continue
       const gap = dayGap(row.date, tx.date)
       if (gap > dateWindow) continue
       const diff = Math.abs(row.amount - tx.amount)
       const close = diff <= Math.max(100, Math.max(row.amount, tx.amount) * 0.05)
       const sameWord = sharesWord(row, tx)
       if (!close && !sameWord) continue
+      if (conflictNeedsPayee && !sameWord) continue
       near.push({ row, tx, score: (close ? 50 : 0) + (sameWord ? 30 : 0) - gap * 5 - diff / 1e6 })
     }
   }
@@ -187,7 +202,7 @@ export function reconcile(
   result.missing = rows.filter((r) => liveRows.has(r))
   // Entries only count as "not on the statement" inside the period it covers, and not when
   // they already came from some bank statement (their row may simply be in another file).
-  result.extra = [...candidates].filter((t) => t.date >= first && t.date <= last && !t.bankRef)
+  result.extra = [...candidates].filter((t) => t.date >= first && t.date <= last && !t[refField])
   return result
 }
 

@@ -191,3 +191,14 @@ New optional fields: `Transaction.loanId / subscriptionId / holdingId / refundOf
 **Refunds**: an income entry with `refundOf` carries the refunded expense's category and counts against that spending, not as income, so the savings rate is not inflated (`domain/summary.ts`). Splitting one payment across categories is not supported; use two entries.
 
 **Wealth section** (`/wealth/*`, `features/wealth`): Net worth, Investments (gain, XIRR from tagged transfers, target mix with Over/Under at ±2 points), Loans (balance estimate rolled forward from interest and tagged repayments), Subscriptions (recurring-payment detection: three charges about a month apart, or two about a year apart, for similar amounts), Insurance. Closing a month fills every net worth line from accounts, valuations and loan balances; any figure can be changed before the snapshot is frozen. Pure logic is in `domain/{investments,loans,recurring,networth}.ts` with tests.
+
+## 13. Email layer (reconciling swept emails)
+
+A second source for the Reconcile screen, beside bank statements. `tools/email_sweep.py` (macOS, Mail.app, no AI) appends one line per spend it finds in mail:
+`2026-11-27 | 450.00 | Swiggy | src=email via=hdfc-upi mid=<id>`. Load that file on Reconcile; it is told apart from a bank statement by its shape (`parser/emailSweep.ts`).
+
+- **Same engine, different evidence.** Rows go through `domain/reconcile.ts` with `accountId = null` (match expenses on any account, since a receipt doesn't say which account paid), `refField: 'emailRef'` and `conflictNeedsPayee` (a close amount alone would pair unrelated spends across accounts; the merchant name must agree).
+- **Own link.** `Transaction.emailRef` is separate from `bankRef`, so an entry can be confirmed by both an email and a bank row without either overwriting the other. Entries added from an email carry `emailRef` and are marked for review when their category was guessed.
+- **Account.** The template name (`hdfc-card`, `hdfc-upi`) picks a likely account; it is a dropdown on each missing row.
+- **Extra** only lists entries from merchants that appear in the emails, so cash and person-to-person payments don't bury real gaps.
+- **Dedupe.** A Message-ID gives a row a stable key, so sweeping the same email twice, or loading two files, never repeats it.

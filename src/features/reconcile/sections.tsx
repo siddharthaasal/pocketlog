@@ -1,12 +1,18 @@
 import { useState } from 'react'
 import { Link } from 'wouter'
 import { EmptyState, Money } from '../../components/ui'
-import { applyStatementAmount, linkTransactions, removeIgnoredPayee } from '../../data/reconcile'
+import {
+  applyEmailAmount,
+  applyStatementAmount,
+  linkEmails,
+  linkTransactions,
+  removeIgnoredPayee,
+} from '../../data/reconcile'
 import { deleteTransaction } from '../../data/repo'
 import { extractPayee, payeeKey, type StatementRow } from '../../domain/reconcile'
 import type { Account, Category, Transaction } from '../../domain/types'
 import { formatShortDate } from '../../lib/dates'
-import type { Plan } from './plan'
+import type { Layer, Plan } from './plan'
 import {
   CalendarGlyph,
   Dot,
@@ -42,15 +48,20 @@ const AccountTag = ({ name }: { name: string }) => (
   </Tag>
 )
 
+const SOURCE = { bank: 'Bank', email: 'Email' } as const
+
 export function ConflictsList({
   conflicts,
   categories,
   accounts,
+  layer = 'bank',
 }: {
   conflicts: Plan['conflicts']
   categories: Category[]
   accounts: Account[]
+  layer?: Layer
 }) {
+  const source = SOURCE[layer]
   if (conflicts.length === 0) return <EmptyState title="No amount differences. 🎉" />
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? '?'
   return (
@@ -64,9 +75,9 @@ export function ConflictsList({
             <Th className="w-[4.5rem]" icon={<CalendarGlyph />}>
               Date
             </Th>
-            <Th icon={<TextGlyph />}>Bank says</Th>
+            <Th icon={<TextGlyph />}>{source} says</Th>
             <Th className="w-[6.5rem]" icon={<NumberGlyph />}>
-              Bank
+              {source}
             </Th>
             <Th icon={<TextGlyph />}>In PocketLog</Th>
             <Th className="w-36" icon={<SelectGlyph />}>
@@ -108,17 +119,25 @@ export function ConflictsList({
                 <SmallButton
                   className="px-1!"
                   title="Your amount is right: remember this match and stop flagging it"
-                  onClick={() => void linkTransactions([{ id: c.tx.id, bankRef: c.row.key }])}
+                  onClick={() =>
+                    void (layer === 'email'
+                      ? linkEmails([{ id: c.tx.id, emailRef: c.row.key }])
+                      : linkTransactions([{ id: c.tx.id, bankRef: c.row.key }]))
+                  }
                 >
                   Keep PocketLog
                 </SmallButton>
                 <SmallButton
                   tone="primary"
                   className="px-1!"
-                  title="Change your entry to the amount on the bank statement"
-                  onClick={() => void applyStatementAmount(c.tx.id, c.row.amount, c.row.key)}
+                  title={`Change your entry to the amount on the ${layer === 'email' ? 'email' : 'bank statement'}`}
+                  onClick={() =>
+                    void (layer === 'email'
+                      ? applyEmailAmount(c.tx.id, c.row.amount, c.row.key)
+                      : applyStatementAmount(c.tx.id, c.row.amount, c.row.key))
+                  }
                 >
-                  Use from bank statement
+                  {layer === 'email' ? 'Use from email' : 'Use from bank statement'}
                 </SmallButton>
               </Td>
             </Tr>
@@ -211,19 +230,30 @@ export function ExtraList({
   extra,
   categories,
   accounts,
+  layer = 'bank',
 }: {
   extra: Transaction[]
   categories: Category[]
   accounts: Account[]
+  layer?: Layer
 }) {
   if (extra.length === 0) {
-    return <EmptyState title="Everything in PocketLog for this period is on the statement." />
+    return (
+      <EmptyState
+        title={
+          layer === 'email'
+            ? 'Every entry from a merchant that emails you has its email.'
+            : 'Everything in PocketLog for this period is on the statement.'
+        }
+      />
+    )
   }
   return (
     <div className="space-y-2">
       <p className="px-1 text-[13px] text-muted">
-        In PocketLog for this period but not on the statement: maybe cash, another account, a wrong
-        date or amount, or a duplicate.
+        {layer === 'email'
+          ? 'From a merchant that emails you, but no email was found: maybe it wasn’t swept yet, or the date or amount is wrong, or it’s a duplicate.'
+          : 'In PocketLog for this period but not on the statement: maybe cash, another account, a wrong date or amount, or a duplicate.'}
       </p>
       <Table minWidth={720}>
         <thead>

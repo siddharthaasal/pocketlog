@@ -1,6 +1,6 @@
 import { useMemo, useState, type ChangeEvent } from 'react'
-import { Button, Card, Field, Loading, PageHeader, Select } from '../../components/ui'
-import { readStatementFile } from '../../data/statementFile'
+import { Button, Card, Field, Loading, PageHeader, Segmented, Select } from '../../components/ui'
+import { readReconcileFile } from '../../data/statementFile'
 import {
   useAccountBalances,
   useAccounts,
@@ -10,12 +10,19 @@ import {
 import { saveAccountBalance } from '../../data/records'
 import { balanceOn } from '../../domain/balances'
 import { formatINR } from '../../domain/money'
-import { linkTransactions, useIgnoredPayees } from '../../data/reconcile'
+import { linkEmails, linkTransactions, useIgnoredPayees } from '../../data/reconcile'
 import { formatShortDate } from '../../lib/dates'
 import { newId } from '../../lib/ids'
 import { ConflictsList, ExtraList, IgnoredList, MatchedList } from './sections'
 import { MissingList } from './MissingList'
-import { buildPlan, guessAccount, type LoadedStatement } from './plan'
+import {
+  buildEmailPlan,
+  buildPlan,
+  guessAccount,
+  type Layer,
+  type LoadedEmails,
+  type LoadedStatement,
+} from './plan'
 import { ViewTabs } from '../../components/table'
 import type { Account, Transaction } from '../../domain/types'
 
@@ -28,14 +35,20 @@ export function ReconcilePage() {
   const ignoredPayees = useIgnoredPayees()
   const checkpoints = useAccountBalances()
   const [files, setFiles] = useState<LoadedStatement[]>([])
+  const [emails, setEmails] = useState<LoadedEmails[]>([])
+  const [layerPick, setLayerPick] = useState<Layer>('bank')
   const [problems, setProblems] = useState<string[]>([])
   const [reading, setReading] = useState(false)
   const [tab, setTab] = useState<Tab>('missing')
 
   const ready = accounts && categories && transactions && ignoredPayees && checkpoints
-  const plan = useMemo(
+  const bankPlan = useMemo(
     () => (ready ? buildPlan(files, transactions, ignoredPayees) : null),
     [ready, files, transactions, ignoredPayees],
+  )
+  const emailPlan = useMemo(
+    () => (ready ? buildEmailPlan(emails, transactions, accounts, ignoredPayees) : null),
+    [ready, emails, transactions, accounts, ignoredPayees],
   )
 
   async function onFiles(e: ChangeEvent<HTMLInputElement>) {
@@ -44,31 +57,47 @@ export function ReconcilePage() {
     if (picked.length === 0 || !accounts) return
     setReading(true)
     const added: LoadedStatement[] = []
+    const addedEmails: LoadedEmails[] = []
     const errors: string[] = []
     for (const file of picked) {
-      const result = await readStatementFile(file)
+      const result = await readReconcileFile(file)
       if (!result.ok) {
         errors.push(`${file.name}: ${result.message}`)
+        continue
+      }
+      if (result.file.kind === 'email') {
+        addedEmails.push({ id: newId(), name: file.name, ...result.file.sweep })
         continue
       }
       added.push({
         id: newId(),
         name: file.name,
-        statement: result.statement,
+        statement: result.file.statement,
         // Never guess silently: a wrong account would hide transfers and mismatch everything.
-        accountId: guessAccount(result.statement.bank, accounts) ?? '',
+        accountId: guessAccount(result.file.statement.bank, accounts) ?? '',
       })
     }
     setFiles((current) => [...current, ...added])
+    setEmails((current) => [...current, ...addedEmails])
+    // Show what was just added.
+    if (added.length === 0 && addedEmails.length > 0) setLayerPick('email')
+    else if (added.length > 0) setLayerPick('bank')
     setProblems(errors)
     setReading(false)
   }
 
-  if (!ready || !plan) return <Loading />
+  if (!ready || !bankPlan || !emailPlan) return <Loading />
 
+  // Show the layer that has something loaded, whichever was picked.
+  const layer: Layer = emails.length === 0 ? 'bank' : files.length === 0 ? 'email' : layerPick
+  const plan = layer === 'email' ? emailPlan : bankPlan
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? '?'
-  const rowsTotal = files.reduce((sum, f) => sum + f.statement.rows.length, 0)
+  const rowsTotal =
+    layer === 'email'
+      ? emails.reduce((sum, f) => sum + f.rows.length, 0)
+      : files.reduce((sum, f) => sum + f.statement.rows.length, 0)
   const unlinked = plan.matched.filter((m) => !m.viaRef && m.tx.type !== 'transfer')
+  const anything = files.length > 0 || emails.length > 0
 
   return (
     <>
@@ -77,18 +106,14 @@ export function ReconcilePage() {
         <div className="space-y-6">
           <Card className="space-y-3 p-5">
             <p className="text-[15px]">
-              Add your bank statement (.xls, .xlsx or .csv). PocketLog compares it with what you’ve
-              logged, flags amounts that differ, and lets you add what’s missing. The file is read
-              on this device and never uploaded.
+              Add your bank statement (.xls, .xlsx or .csv), or the text file your email sweep
+              writes. PocketLog compares it with what you’ve logged, flags amounts that differ, and
+              lets you add what’s missing. Files are read on this device and never uploaded.
             </p>
             <label
               className={`inline-flex h-10 w-fit cursor-pointer items-center justify-center rounded-lg bg-accent px-5 text-[14.5px] font-medium text-accent-fg hover:opacity-90 ${reading ? 'pointer-events-none opacity-40' : ''}`}
             >
-              {reading
-                ? 'Reading…'
-                : files.length > 0
-                  ? 'Add another statement'
-                  : 'Choose statement'}
+              {reading ? 'Reading…' : anything ? 'Add another file' : 'Choose a file'}
               <input
                 type="file"
                 multiple
@@ -163,14 +188,44 @@ export function ReconcilePage() {
               )}
             </Card>
           ))}
+
+          {emails.map((f) => (
+            <Card key={f.id} className="flex items-start justify-between gap-3 p-4">
+              <div className="min-w-0">
+                <div className="truncate text-[15px] font-medium">{f.name}</div>
+                <div className="text-[13px] text-muted">
+                  {f.rows.length} emailed spends · {formatShortDate(f.from, true)} to{' '}
+                  {formatShortDate(f.to, true)}
+                  {f.skipped > 0 && ` · ${f.skipped} lines couldn’t be read`}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                className="h-9 px-3 text-[14px]"
+                onClick={() => setEmails((cur) => cur.filter((x) => x.id !== f.id))}
+              >
+                Remove
+              </Button>
+            </Card>
+          ))}
         </div>
 
-        {files.length > 0 && (
+        {anything && (
           <section className="space-y-4">
+            {files.length > 0 && emails.length > 0 && (
+              <Segmented<Layer>
+                value={layer}
+                onChange={setLayerPick}
+                options={[
+                  { value: 'bank', label: 'Bank statements' },
+                  { value: 'email', label: 'Emails' },
+                ]}
+              />
+            )}
             <p className="px-1 text-[14px] text-muted">
-              {rowsTotal} statement rows: {plan.matched.length} already in PocketLog,{' '}
-              {plan.conflicts.length} with a different amount, {plan.missing.length} missing
-              {plan.ignored.length > 0 ? `, ${plan.ignored.length} ignored as bank noise` : ''}.
+              {layer === 'email'
+                ? `${rowsTotal} emailed spends: ${plan.matched.length} already in PocketLog, ${plan.conflicts.length} with a different amount, ${plan.missing.length} missing${plan.ignored.length > 0 ? `, ${plan.ignored.length} ignored` : ''}.`
+                : `${rowsTotal} statement rows: ${plan.matched.length} already in PocketLog, ${plan.conflicts.length} with a different amount, ${plan.missing.length} missing${plan.ignored.length > 0 ? `, ${plan.ignored.length} ignored as bank noise` : ''}.`}
             </p>
             <ViewTabs<Tab>
               value={tab}
@@ -185,10 +240,12 @@ export function ReconcilePage() {
 
             {tab === 'missing' && (
               <MissingList
+                key={layer}
                 items={plan.missing}
                 transactions={transactions}
                 categories={categories}
                 accounts={accounts}
+                layer={layer}
               />
             )}
             {tab === 'conflicts' && (
@@ -196,6 +253,7 @@ export function ReconcilePage() {
                 conflicts={plan.conflicts}
                 categories={categories}
                 accounts={accounts}
+                layer={layer}
               />
             )}
             {tab === 'matched' && (
@@ -205,12 +263,19 @@ export function ReconcilePage() {
                 accountName={accountName}
                 unlinked={unlinked.length}
                 onRemember={() =>
-                  void linkTransactions(unlinked.map((m) => ({ id: m.tx.id, bankRef: m.row.key })))
+                  void (layer === 'email'
+                    ? linkEmails(unlinked.map((m) => ({ id: m.tx.id, emailRef: m.row.key })))
+                    : linkTransactions(unlinked.map((m) => ({ id: m.tx.id, bankRef: m.row.key }))))
                 }
               />
             )}
             {tab === 'extra' && (
-              <ExtraList extra={plan.extra} categories={categories} accounts={accounts} />
+              <ExtraList
+                extra={plan.extra}
+                categories={categories}
+                accounts={accounts}
+                layer={layer}
+              />
             )}
 
             {plan.ignored.length > 0 && <IgnoredList ignored={plan.ignored} />}
