@@ -4,7 +4,10 @@ import { PageHeader } from '../../components/ui'
 import { cx } from '../../lib/cx'
 
 /** Sections of the Wealth area, in tab order. Each phase of the tracker adds its own. */
-export const WEALTH_SECTIONS = [{ href: '/wealth/investments', label: 'Investments' }] as const
+export const WEALTH_SECTIONS = [
+  { href: '/wealth/investments', label: 'Investments' },
+  { href: '/wealth/loans', label: 'Loans' },
+] as const
 
 export function WealthShell({ children, action }: { children: ReactNode; action?: ReactNode }) {
   const [location] = useLocation()
