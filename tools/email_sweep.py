@@ -74,9 +74,17 @@ GENERIC_TOTAL = re.compile(
     r"(?:grand total|total paid|amount paid|order total|total amount|total)"
     r"[^\d\n]{0,25}(?:Rs\.?|INR|₹)?\s?(?P<amount>\d[\d,]*(?:\.\d{1,2})?)", re.I)
 
+# Subjects that are never a spend: wallet top-ups, cancelled orders, remittance paperwork...
 SKIP_SUBJECT = re.compile(
-    r"\b(otp|one[- ]time|refund|credited|failed|declined|statement|offer|reward|"
-    r"cashback|reminder|newsletter)\b", re.I)
+    r"\b(otp|one[- ]time|refund(?:ed)?|credited|failed|declined|statement|offer|reward|"
+    r"cashback|reminder|newsletter|cancell?ed|added to your|swift copy|remittance)\b", re.I)
+
+# Some senders put the whole payment in the subject line.
+SUBJECT_TEMPLATES = [
+    ("amazonpay", "amazonpay",
+     r"payment of\s*(?:Rs\.?|INR|₹)?\s*(?P<amount>\d[\d,]*(?:\.\d{1,2})?)\s*to\s+"
+     r"(?P<merchant>.+?)\s+was successful"),
+]
 
 
 def to_float(s):
@@ -101,6 +109,13 @@ def parse_email(sender, subject, body):
     if SKIP_SUBJECT.search(subject):
         return None
     s = sender.lower()
+    for name, sender_key, pattern in SUBJECT_TEMPLATES:
+        if sender_key in s:
+            m = re.search(pattern, subject, re.I)
+            if m:
+                return {"amount": to_float(m["amount"]),
+                        "merchant": clean_merchant(m["merchant"], sender),
+                        "via": name}
     for name, sender_key, pattern in BANK_TEMPLATES:
         if sender_key in s:
             m = re.search(pattern, body, re.I | re.S)

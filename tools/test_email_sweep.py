@@ -29,6 +29,21 @@ class ParseEmail(unittest.TestCase):
         for subject in ["Refund processed", "Your OTP is 123456", "Big offer today", "Statement ready"]:
             self.assertIsNone(parse_email("a@hdfcbank.net", subject, "Rs. 100 has been debited"))
 
+    def test_amazon_pay_puts_the_payment_in_the_subject(self):
+        r = parse_email("Amazon Pay India <no-reply@amazonpay.in>",
+                        "Your payment of \u20b9\u00a01191.42 to BOOKMYSHOW was successful",
+                        "Thank you for using Amazon Pay.")
+        self.assertEqual((r["amount"], r["merchant"], r["via"]), (1191.42, "Bookmyshow", "amazonpay"))
+
+    def test_skips_what_is_not_a_spend(self):
+        for sender, subject in [
+            ("Amazon Pay India <no-reply@amazonpay.in>", "\u20b9150.00 added to your Amazon Pay Balance."),
+            ("TradeQualityUnit <x@hdfcbank.bank.in>",
+             "Swift Copy for Cross-Border Remittance \u2013 Ref: 201126BTT10303 \u2013 USD 532,66"),
+            ("Google Payments <payments-noreply@google.com>", "Your Chrome Web Store order has been canceled"),
+        ]:
+            self.assertIsNone(parse_email(sender, subject, "Total: Rs. 150.00"), subject)
+
     def test_a_lone_comma_is_not_an_amount(self):
         # Used to raise ValueError: could not convert string to float: ','
         self.assertIsNone(parse_email("x@amazon.in", "Your order", "Total: ,"))
