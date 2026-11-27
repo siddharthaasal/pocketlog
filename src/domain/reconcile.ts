@@ -173,7 +173,7 @@ export function reconcile(
       if (side(tx) !== row.direction || tx.amount !== row.amount) continue
       const gap = dayGap(row.date, tx.date)
       if (gap > dateWindow) continue
-      exact.push({ row, tx, score: 100 - gap * 10 + (sharesWord(row, tx) ? 5 : 0) })
+      exact.push({ row, tx, score: 100 - gap * 10 + (sharesWord(row, tx) ? 25 : 0) })
     }
   }
   for (const { row, tx } of assign(exact, liveRows, candidates)) {

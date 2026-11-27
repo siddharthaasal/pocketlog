@@ -285,6 +285,19 @@ describe('reconcile across accounts (swept emails)', () => {
   })
 })
 
+describe('same amount, different payees', () => {
+  it('pairs by payee before a closer date, so the other row keeps its own entry', () => {
+    const swiggy = row({ narration: 'Swiggy', date: '2026-11-10', amount: 5_000 })
+    const cafe = row({ narration: 'Hm Irani', date: '2026-11-11', amount: 5_000 })
+    const tSwiggy = makeTransaction({ merchant: 'Swiggy', date: '2026-11-11', amount: 5_000 })
+    const tCafe = makeTransaction({ merchant: 'Hm Irani', date: '2026-11-10', amount: 5_000 })
+    const res = reconcile([swiggy, cafe], [tSwiggy, tCafe], null)
+    expect(res.matched.map((m) => [m.row, m.tx])).toEqual(
+      expect.arrayContaining([[swiggy, tSwiggy], [cafe, tCafe]]),
+    )
+  })
+})
+
 describe('conflictNeedsPayee', () => {
   it('does not pair a close amount with an unrelated payee', () => {
     const r = row({ narration: 'Uber', amount: 21_250 })

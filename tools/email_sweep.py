@@ -54,7 +54,7 @@ SENDERS = ["hdfcbank", "icicibank", "axisbank", "swiggy", "zomato",
 
 # Cleans up ugly merchant names. Add to this as you see them.
 ALIASES = {
-    "amzn": "Amazon", "amazon pay": "Amazon", "swiggy": "Swiggy",
+    "amzn": "Amazon", "amazon": "Amazon", "swiggy": "Swiggy",
     "zomato": "Zomato", "uber": "Uber",
 }
 
@@ -79,8 +79,14 @@ GENERIC_TOTAL = re.compile(
 SKIP_SUBJECT = re.compile(
     r"\b(otp|one[- ]time|refund(?:ed)?|credited|failed|declined|unsuccessful|statement|offer|"
     r"reward|cashback|reminder|newsletter|cancell?ed|added to your|swift copy|remittance|"
-    r"forex conversion|feedback|share your|hear from you|help make|your experience|research)\b"
-    r"|\d+% off", re.I)
+    r"forex conversion|feedback|share your|hear from you|help make|your experience|research|"
+    r"payslip|taxinvoice|invoice copy|sign-in|inactive|safety hub|your input matters)\b"
+    r"|\d+% off"
+    # Order and delivery stages: the payment itself arrives as its own email.
+    r"|^(?:ordered|shipped|out for delivery|delivered):"
+    r"|regarding your recent order|prime membership|brand warranty|return of|"
+    r"reservation confirmed|previous trip|important notice|bill for your|taking full advantage",
+    re.I)
 
 # Each template: (via, sender contains, where to look, pattern). Patterns name their groups:
 # amount (required), merchant, and date (the day of the spend, which beats the day the email
@@ -100,6 +106,21 @@ TEMPLATES = [
     ("hdfc-upi", "hdfcbank", "body",
      r"Rs\.?\s?" + NUM + r"\s+has been debited from account\s+\d+\s+to account\s+\S+"
      r"\s+on\s+(?P<date>\d{2}-\d{2}-\d{2,4})"),
+    # "Rs 4798.00 was paid on Amazon.in": paid from Amazon Pay balance.
+    ("amazonpay", "amazonpay", "subject",
+     r"Rs\.?\s?" + NUM + r"\s+was paid on\s+(?P<merchant>\S+)"),
+    # Razorpay receipt: merchant, "₹1,633.64", "Paid Successfully", "Method card", "Paid On 24 Sep, 2026".
+    ("razorpay", "razorpay", "body",
+     r"(?P<merchant>[^\n]+?)\s*\n\s*₹\s?" + NUM + r"\s*\n\s*Paid Successfully.*?Method\s+(?P<pay>\w+)"
+     r".*?Paid On\s+(?P<date>\d{1,2} [A-Za-z]{3}, \d{4})"),
+    # Electricity through Qube: "bill payment of ₹647.00 for K02B304".
+    ("qube", "qube.eco", "body", r"bill payment of\s*₹\s?" + NUM),
+    # Apple invoice: the date under "Tax Invoice", then the price of the item.
+    ("apple", "apple.com", "body",
+     r"Tax Invoice\s+(?P<date>\d{1,2} [A-Za-z]+ \d{4}).*?₹\s?" + NUM),
+    # Rent receipt: "Payment Received ₹24,549.00 ... Payment Date 31/07/2026".
+    ("rent", "kots.world", "body",
+     r"Payment Received\s+₹\s?" + NUM + r".*?Payment Date\s+(?P<date>\d{2}/\d{2}/\d{4})"),
     # Guesses: check them against a real email and tweak.
     ("hdfc-card", "hdfcbank", "body",
      r"Rs\.?\s?" + NUM + r"\s+(?:is|has been)\s+debited from your HDFC Bank Credit Card.*?towards\s+"
@@ -123,11 +144,25 @@ BODY_MERCHANT = re.compile(
 # Mail from your bank that reports money coming in is not a spend. Remembered, so it isn't re-read.
 # Also your own forex remittance converting ("deducted from your account and added to RFX ... USD").
 SKIP_BODY = re.compile(
-    r"successfully credited|has been credited|credited to your|added to RFX", re.I)
+    r"successfully credited|has been credited|credited to your|added to RFX|"
+    r"biometric authentication|accepted the terms", re.I)
 
 # What to call a payment whose alert names no payee.
-DEFAULT_MERCHANT = {"hdfc-upi": "UPI payment", "hdfc-debit": "Debit card"}
+DEFAULT_MERCHANT = {"hdfc-upi": "UPI payment", "hdfc-debit": "Debit card",
+                    "qube": "Electricity", "apple": "Apple", "rent": "Rent"}
 IGNORE = object()
+
+
+# Receipts that the bank also alerts about (the same spend arrives twice, once from each side).
+RECEIPT_VIAS = ("razorpay", "qube", "apple", "amazonpay", "rent")
+
+
+def drop_duplicate_receipts(items):
+    """Keep the bank alert and drop the merchant receipt for the same amount within a day."""
+    alerts = [(i["amount"], i["date"]) for i in items if i["via"].startswith(("hdfc", "icici", "axis"))]
+    return [i for i in items
+            if not i["via"].startswith(RECEIPT_VIAS)
+            or not any(a == i["amount"] and abs((d - i["date"]).days) <= 1 for a, d in alerts)]
 
 
 def to_float(s):
@@ -148,7 +183,7 @@ def clean_merchant(raw, sender):
 
 
 def parse_when(text):
-    for fmt in ("%d-%m-%y", "%d-%m-%Y", "%b %d, %Y"):
+    for fmt in ("%d-%m-%y", "%d-%m-%Y", "%b %d, %Y", "%d %b, %Y", "%d %B %Y", "%d/%m/%Y"):
         try:
             return datetime.strptime(text.strip(), fmt)
         except ValueError:
@@ -178,6 +213,8 @@ def parse_email(sender, subject, body):
         when = parse_when(m.groupdict().get("date") or "")
         if when:
             out["date"] = when
+        if via == "razorpay":
+            out["via"] = f"razorpay-{m['pay'].lower()}"
         if via == "uber":
             pay = UBER_PAYMENT.search(body)
             mode = (pay["pay"].strip().lower() if pay else "")
@@ -198,7 +235,8 @@ def parse_email(sender, subject, body):
 # ------------------------------------------------------------ MAIL.APP -----
 # Arguments: year, month, day, then the mailbox names to read. For every account that has a
 # mailbox of that name (and "inbox" for all Inboxes) it lists messages received since the date.
-# Fields are separated by tabs: Message-ID, sender, subject, date, account, mailbox.
+# Fields are separated by ASCII 31 and records by ASCII 30, because a subject can contain tabs
+# and line breaks: Message-ID, sender, subject, date, account, mailbox.
 LIST_SCRIPT = '''
 on run argv
   set cutoff to current date
@@ -226,13 +264,14 @@ on run argv
         set msgs to (messages of mb whose date received is greater than or equal to cutoff)
         repeat with m in msgs
           set d to date received of m
-          set rec to (message id of m) & tab & (sender of m) & tab & (subject of m) & tab & (year of d as string) & "-" & ((month of d as integer) as string) & "-" & (day of d as string) & " " & (time of d as string) & tab & (item 2 of f) & tab & (item 3 of f)
+          set fs to ASCII character 31
+          set rec to (message id of m) & fs & (sender of m) & fs & (subject of m) & fs & (year of d as string) & "-" & ((month of d as integer) as string) & "-" & (day of d as string) & " " & (time of d as string) & fs & (item 2 of f) & fs & (item 3 of f)
           set end of out to rec
         end repeat
       end repeat
     end repeat
   end tell
-  set AppleScript's text item delimiters to linefeed
+  set AppleScript's text item delimiters to (ASCII character 30)
   return out as string
 end run
 '''
@@ -279,8 +318,8 @@ def osa(script, *args, timeout=600):
 def list_messages(since):
     out = osa(LIST_SCRIPT, str(since.year), str(since.month), str(since.day), *MAILBOXES)
     msgs = []
-    for line in out.splitlines():
-        parts = line.split("\t")
+    for line in out.split("\x1e"):
+        parts = line.split("\x1f")
         if len(parts) < 6:
             continue
         mid, sender, subject, stamp, account, box = (p for p in parts[:6])
@@ -410,10 +449,11 @@ def main():
         if res is IGNORE:
             ignored.append(m["mid"])
         elif res:
-            entries.append(format_line({**m, **res}))
+            entries.append({**m, **res})
         else:
             review.append(f"{m['date']:%Y-%m-%d} | {m['sender']} | {m['subject']} | mid={m['mid']}")
 
+    entries = [format_line(e) for e in drop_duplicate_receipts(entries)]
     for line in entries:
         print("ENTRY ", line)
     for line in review:

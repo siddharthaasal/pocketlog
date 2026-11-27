@@ -1,7 +1,7 @@
 """Run with: python3 -m unittest tools/test_email_sweep.py"""
 import sys
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -107,6 +107,54 @@ class ParseEmail(unittest.TestCase):
 
     def test_nothing_found(self):
         self.assertIsNone(parse_email("x@amazon.in", "Hello", "No money here"))
+
+
+class WholeYearEmails(unittest.TestCase):
+    def test_amazon_pay_balance_payment_in_the_subject(self):
+        r = parse_email("Amazon Pay India <no-reply@amazonpay.in>", "Rs 4798.00 was paid on Amazon.in", "")
+        self.assertEqual((r["amount"], r["merchant"], r["via"]), (4798.0, "Amazon", "amazonpay"))
+
+    def test_razorpay_receipt_reads_merchant_method_and_date(self):
+        body = ("Hostinger\n\u20b91,633.64\nPaid Successfully\nPayment Id\npay_X\nMethod\ncard\nXXXX-XXXX-XXXX-1234\n"
+                "Paid On\n24 Sep, 2026 08:56:36 PM IST\n")
+        r = parse_email("Payments <no-reply@razorpay.com>", "Payment successful for Hostinger", body)
+        self.assertEqual((r["amount"], r["merchant"], r["via"]), (1633.64, "Hostinger", "razorpay-card"))
+        self.assertEqual(r["date"], datetime(2026, 9, 24))
+
+    def test_electricity_bill_payment(self):
+        body = "Your electricity bill payment of \u20b9647.00 for K02B304 has been processed successfully."
+        r = parse_email("info@qube.eco", "Electricity Bill Payment Successful", body)
+        self.assertEqual((r["amount"], r["merchant"]), (647.0, "Electricity"))
+
+    def test_apple_invoice_takes_the_item_price_not_the_tax(self):
+        body = ("Tax Invoice\n6 September 2026\nOrder ID:X\niCloud+ with 50 GB (Monthly)\nRenews 7 October 2026\n"
+                "\u20b975.00\nSubtotal\n\u20b963.56\nIGST charged at 18%\n\u20b911.44\n")
+        r = parse_email("Apple <no_reply@email.apple.com>", "Your invoice from Apple.", body)
+        self.assertEqual((r["amount"], r["date"]), (75.0, datetime(2026, 9, 6)))
+
+    def test_rent_receipt(self):
+        body = "Payment Received\nDear X,\nPayment Received \n\u20b924,549.00 \nInvoice No\nA/1\nPayment Date\n31/07/2026 \n"
+        r = parse_email("Hello@kots.world", "Payment Received by Kots Renting Private Limited", body)
+        self.assertEqual((r["amount"], r["merchant"], r["date"]), (24549.0, "Rent", datetime(2026, 7, 31)))
+
+    def test_order_stages_and_notices_are_not_spends(self):
+        for subject in ('Shipped: "Pack of 4..."', 'Delivered: "Tote"', "Reservation confirmed for Sunday, 23 August",
+                        "Bill for your Airtel Wi-Fi - June'26", "Payslip for the month of October 2026",
+                        "Meet your new Safety Hub", "TaxInvoice - KA1262711"):
+            self.assertIs(parse_email("x@amazon.in", subject, "Total \u20b9100"), IGNORE, subject)
+
+    def test_biometric_notice_is_not_a_spend(self):
+        self.assertIs(parse_email("alerts@hdfcbank.bank.in", "View: Account update",
+                                  "Biometric authentication has been enabled for UPI payments"), IGNORE)
+
+    def test_a_receipt_is_dropped_when_the_bank_alert_for_it_exists(self):
+        from email_sweep import drop_duplicate_receipts
+        day = datetime(2026, 9, 24)
+        items = [{"amount": 75.0, "date": day, "via": "hdfc-upi"},
+                 {"amount": 75.0, "date": day + timedelta(days=1), "via": "apple"},
+                 {"amount": 80.0, "date": day, "via": "apple"}]
+        self.assertEqual([i["via"] + str(i["amount"]) for i in drop_duplicate_receipts(items)],
+                         ["hdfc-upi75.0", "apple80.0"])
 
 
 class Format(unittest.TestCase):
