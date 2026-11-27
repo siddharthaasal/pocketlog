@@ -34,6 +34,7 @@ export function SettingsPage() {
               detail={activeCount(accounts)}
             />
             <SettingsRow href="/inbox" title="Siri inbox" />
+            <SettingsRow href="/reconcile" title="Reconcile bank statement" />
           </Card>
         </section>
 

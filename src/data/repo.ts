@@ -19,6 +19,8 @@ interface AddOptions {
   needsReview?: boolean
   /** A deterministic id, so the same Siri entry imported on two devices merges as one. */
   id?: string
+  /** The bank-statement row this was created from (see domain/reconcile). */
+  bankRef?: string
 }
 
 /** Checks that referenced accounts/categories exist, are active and match the transaction type. */
@@ -40,7 +42,7 @@ async function assertReferences(t: TransactionInput): Promise<void> {
 
 export async function addTransaction(
   input: TransactionInput,
-  { source = 'manual', needsReview = false, id = newId() }: AddOptions = {},
+  { source = 'manual', needsReview = false, id = newId(), bankRef }: AddOptions = {},
 ): Promise<Transaction> {
   const fields = transactionInputSchema.parse(input)
   const now = nowISO()
@@ -50,6 +52,7 @@ export async function addTransaction(
     currency: 'INR',
     source,
     needsReview,
+    ...(bankRef && { bankRef }),
     createdAt: now,
     updatedAt: now,
   })
@@ -72,6 +75,7 @@ export async function updateTransaction(id: string, input: TransactionInput): Pr
       currency: existing.currency,
       source: existing.source,
       createdAt: existing.createdAt,
+      ...(existing.bankRef && { bankRef: existing.bankRef }),
       ...fields,
       needsReview: false,
       updatedAt: nowISO(),
