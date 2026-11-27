@@ -1,4 +1,4 @@
-import { Route, Switch } from 'wouter'
+import { Redirect, Route, Switch } from 'wouter'
 import { AnalyticsPage } from '../features/analytics/AnalyticsPage'
 import { DashboardPage } from '../features/dashboard/DashboardPage'
 import { BackupPage } from '../features/data/BackupPage'
@@ -12,6 +12,8 @@ import { CategoryEditPage } from '../features/settings/CategoryEditPage'
 import { SettingsPage } from '../features/settings/SettingsPage'
 import { TransactionFormPage } from '../features/transactions/TransactionFormPage'
 import { TransactionsPage } from '../features/transactions/TransactionsPage'
+import { HoldingEditPage } from '../features/wealth/HoldingEditPage'
+import { InvestmentsPage } from '../features/wealth/InvestmentsPage'
 import { Layout } from './Layout'
 
 export function App() {
@@ -25,6 +27,11 @@ export function App() {
         <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/inbox" component={InboxPage} />
         <Route path="/reconcile" component={ReconcilePage} />
+        <Route path="/wealth">
+          <Redirect to="/wealth/investments" replace />
+        </Route>
+        <Route path="/wealth/investments" component={InvestmentsPage} />
+        <Route path="/wealth/investments/:id" component={HoldingEditPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/settings/data" component={BackupPage} />
         <Route path="/settings/privacy" component={PrivacyPage} />

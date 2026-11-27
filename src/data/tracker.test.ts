@@ -6,6 +6,7 @@ import { holdingSchema, valuationSchema } from '../domain/types'
 import { applyMerge, collectData, deleteAllData, exportBackupText } from './backup'
 import Dexie from 'dexie'
 import { createDatabase, db } from './db'
+import { saveHolding, saveValuations, setHoldingArchived } from './investments'
 import { monthRowId, removeRecord, saveAccountBalance, saveRecord } from './records'
 import { addTransaction, updateTransaction } from './repo'
 
@@ -213,5 +214,25 @@ describe('upgrading an existing database', () => {
     expect(await upgraded.transactions.get('t1')).toMatchObject({ amount: 100 })
     expect(await upgraded.holdings.count()).toBe(0)
     await upgraded.delete()
+  })
+})
+
+describe('investments data', () => {
+  it('saves a month of values together and replaces them on a second save', async () => {
+    const a = await saveHolding({ name: 'A', kind: 'stock', assetClass: 'equity' })
+    const b = await saveHolding({ name: 'B', kind: 'fd', assetClass: 'debt' })
+    await saveValuations('2026-11', [
+      { holdingId: a.id, invested: 100, value: 120 },
+      { holdingId: b.id, invested: 50, value: 52 },
+    ])
+    await saveValuations('2026-11', [{ holdingId: a.id, invested: 100, value: 130 }])
+    expect(await db.valuations.count()).toBe(2)
+    expect((await db.valuations.get(monthRowId('val', a.id, '2026-11')))?.value).toBe(130)
+  })
+
+  it('archives and restores a holding', async () => {
+    const h = await saveHolding({ name: 'A', kind: 'stock', assetClass: 'equity' })
+    expect((await setHoldingArchived(h.id, true)).archived).toBe(true)
+    expect((await setHoldingArchived(h.id, false)).archived).toBe(false)
   })
 })

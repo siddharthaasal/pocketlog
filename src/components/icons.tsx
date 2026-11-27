@@ -82,3 +82,10 @@ export const MicIcon = (p: IconProps) => (
     <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
   </Icon>
 )
+
+export const WealthIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M3 17 9 11l4 4 8-8" />
+    <path d="M15 7h6v6" />
+  </Icon>
+)
