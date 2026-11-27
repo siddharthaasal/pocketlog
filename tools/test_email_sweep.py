@@ -17,6 +17,19 @@ class ParseEmail(unittest.TestCase):
         self.assertEqual((r["amount"], r["merchant"], r["via"]), (91.0, "Ravi K", "hdfc-upi"))
         self.assertEqual(r["date"], datetime(2026, 11, 27))
 
+    def test_hdfc_upi_older_wording_has_no_payee(self):
+        body = ("Dear Customer,\n\nRs.10.00 has been debited from account 1234 to account ******* on 23-11-26."
+                "Your UPI transaction reference number is 123456789012.\n")
+        r = parse_email("HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>",
+                        "\u2757  You have done a UPI txn. Check details!", body)
+        self.assertEqual((r["amount"], r["merchant"], r["via"]), (10.0, "UPI payment", "hdfc-upi"))
+        self.assertEqual(r["date"], datetime(2026, 11, 23))
+
+    def test_forex_remittance_conversion_is_not_a_spend(self):
+        body = ("Rs. INR 49,859.64 is deducted from your account ending XX1234 and added to RFX "
+                "201126BTT10303 USD532.66@93.605 account on 23-NOV-2026.\nThe available balance is Rs. INR 30,083.20.")
+        self.assertIs(parse_email("alerts@hdfcbank.bank.in", "View: Account update for your HDFC Bank A/c", body), IGNORE)
+
     def test_hdfc_account_update_credit_is_not_a_spend(self):
         body = ("We're writing to inform you that Rs.1.00 has been successfully credited to your HDFC Bank "
                 "account ending in 1234.\nSender: SOME SHOP PVT LTD (VPA: *****@axisbank)")

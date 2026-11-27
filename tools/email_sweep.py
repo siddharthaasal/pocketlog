@@ -96,6 +96,10 @@ TEMPLATES = [
     ("hdfc-upi", "hdfcbank", "body",
      r"Rs\.?\s?" + NUM + r"\s+is debited from your account ending\s+\d+\s+towards VPA\s+\S+"
      r"\s+\((?P<merchant>[^)]+)\)\s+on\s+(?P<date>\d{2}-\d{2}-\d{2,4})"),
+    # The older wording, with no payee: "Rs.10.00 has been debited from account 1234 to account ******* on 23-11-26."
+    ("hdfc-upi", "hdfcbank", "body",
+     r"Rs\.?\s?" + NUM + r"\s+has been debited from account\s+\d+\s+to account\s+\S+"
+     r"\s+on\s+(?P<date>\d{2}-\d{2}-\d{2,4})"),
     # Guesses: check them against a real email and tweak.
     ("hdfc-card", "hdfcbank", "body",
      r"Rs\.?\s?" + NUM + r"\s+(?:is|has been)\s+debited from your HDFC Bank Credit Card.*?towards\s+"
@@ -117,7 +121,12 @@ BODY_MERCHANT = re.compile(
     r"\s+(?:on|at|ref|\.)", re.I)
 
 # Mail from your bank that reports money coming in is not a spend. Remembered, so it isn't re-read.
-SKIP_BODY = re.compile(r"successfully credited|has been credited|credited to your", re.I)
+# Also your own forex remittance converting ("deducted from your account and added to RFX ... USD").
+SKIP_BODY = re.compile(
+    r"successfully credited|has been credited|credited to your|added to RFX", re.I)
+
+# What to call a payment whose alert names no payee.
+DEFAULT_MERCHANT = {"hdfc-upi": "UPI payment", "hdfc-debit": "Debit card"}
 IGNORE = object()
 
 
@@ -162,7 +171,8 @@ def parse_email(sender, subject, body):
         found = m.groupdict().get("merchant")
         if not found and via == "hdfc-debit":
             guess = BODY_MERCHANT.search(body)
-            found = guess["merchant"] if guess else "Debit card"
+            found = guess["merchant"] if guess else None
+        found = found or DEFAULT_MERCHANT.get(via)
         out = {"amount": to_float(m["amount"]),
                "merchant": clean_merchant(found, sender), "via": via}
         when = parse_when(m.groupdict().get("date") or "")
