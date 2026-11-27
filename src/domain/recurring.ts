@@ -162,3 +162,21 @@ export function upcomingRenewals<T extends { renewal?: string | undefined }>(
     .filter((i) => i.renewal && i.renewal >= today && i.renewal <= limit)
     .sort((a, b) => a.renewal!.localeCompare(b.renewal!))
 }
+
+export type RenewalState = 'overdue' | 'soon' | 'later' | 'none'
+
+/** How close a renewal date is: overdue once past, soon within `soonDays`. */
+export function renewalState(date: string | undefined, today: string, soonDays = 30): RenewalState {
+  if (!date) return 'none'
+  if (date < today) return 'overdue'
+  return date <= addDays(today, soonDays) ? 'soon' : 'later'
+}
+
+/**
+ * The renewal after paying the current one: one period on, and further if that is still in
+ * the past (a policy paid long after it fell due).
+ */
+export function advanceRenewal(renewal: string, billing: BillingPeriod, paidOn: string): string {
+  const next = addMonths(renewal, MONTHS[billing])
+  return next > paidOn ? next : nextRenewalAfter(next, billing, paidOn)
+}

@@ -164,3 +164,27 @@ describe('matching charges', () => {
     ).toEqual(new Set(['netflix']))
   })
 })
+
+describe('renewalState', () => {
+  it('says how close a renewal is', async () => {
+    const { renewalState } = await import('./recurring')
+    expect(renewalState(undefined, '2026-11-27')).toBe('none')
+    expect(renewalState('2026-11-26', '2026-11-27')).toBe('overdue')
+    expect(renewalState('2026-11-27', '2026-11-27')).toBe('soon')
+    expect(renewalState('2026-12-27', '2026-11-27')).toBe('soon')
+    expect(renewalState('2026-12-28', '2026-11-27')).toBe('later')
+  })
+})
+
+describe('advanceRenewal', () => {
+  it('moves one period on, even when paid before the due date', async () => {
+    const { advanceRenewal } = await import('./recurring')
+    expect(advanceRenewal('2026-12-12', 'yearly', '2026-11-27')).toBe('2027-12-12')
+    expect(advanceRenewal('2026-11-20', 'quarterly', '2026-11-27')).toBe('2027-02-20')
+  })
+
+  it('skips periods that are already past', async () => {
+    const { advanceRenewal } = await import('./recurring')
+    expect(advanceRenewal('2025-03-01', 'yearly', '2026-11-27')).toBe('2027-03-01')
+  })
+})

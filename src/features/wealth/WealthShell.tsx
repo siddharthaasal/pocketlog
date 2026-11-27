@@ -8,6 +8,7 @@ export const WEALTH_SECTIONS = [
   { href: '/wealth/investments', label: 'Investments' },
   { href: '/wealth/loans', label: 'Loans' },
   { href: '/wealth/subscriptions', label: 'Subscriptions' },
+  { href: '/wealth/insurance', label: 'Insurance' },
 ] as const
 
 export function WealthShell({ children, action }: { children: ReactNode; action?: ReactNode }) {
