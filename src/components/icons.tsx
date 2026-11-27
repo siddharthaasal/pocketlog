@@ -68,6 +68,14 @@ export const ChartIcon = (p: IconProps) => (
   </Icon>
 )
 
+export const ReconcileIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M6 3h9l4 4v14H6z" />
+    <path d="M15 3v4h4" />
+    <path d="m9.5 14 2 2 3.5-4" />
+  </Icon>
+)
+
 export const MicIcon = (p: IconProps) => (
   <Icon {...p}>
     <rect x="9" y="3" width="6" height="11" rx="3" />

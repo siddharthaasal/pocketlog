@@ -64,7 +64,7 @@ export function ReconcilePage() {
 
   return (
     <>
-      <PageHeader title="Reconcile" back="/settings" />
+      <PageHeader title="Reconcile" />
       <div className="space-y-6">
         <Card className="space-y-3 p-5">
           <p className="text-[15px]">

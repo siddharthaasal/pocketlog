@@ -157,7 +157,7 @@ The plan's separate sync and deployment phases are folded into 1 and 4.
 
 ## 11. Bank statement reconciliation (Phase 5)
 
-Settings → **Reconcile bank statement**. Deterministic rules, no LLM; everything runs on the device and the file is never uploaded.
+The **Reconcile** tab (`/reconcile`). Deterministic rules, no LLM; everything runs on the device and the file is never uploaded.
 
 - **Reading** (`parser/statement.ts`, pure): the header row is found by column names (Date, Narration, Withdrawal, Deposit, Balance), so HDFC, PNB and most CSV exports work without per-bank code. `.xls/.xlsx` go through SheetJS, loaded lazily (own ~490 KB chunk) only on this screen; installed from SheetJS's official tarball because the npm `xlsx` package is stale. Each row gets a stable key (hash of date, direction, amount, narration, balance).
 - **Matching** (`domain/reconcile.ts`, pure, per account), in passes over what's left: (1) rows already linked by `bankRef`; (2) same direction and amount, date within ±2 days, closest date first, each entry used once; (3) same direction and date window but a different amount, when the amount is within ₹1 or 5% or the payee shares a word → **conflict**. The remainder is **missing** (statement only) or **extra** (PocketLog only, inside the statement's period and not already from a bank row).
