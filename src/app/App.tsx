@@ -14,6 +14,8 @@ import { TransactionFormPage } from '../features/transactions/TransactionFormPag
 import { TransactionsPage } from '../features/transactions/TransactionsPage'
 import { HoldingEditPage } from '../features/wealth/HoldingEditPage'
 import { InvestmentsPage } from '../features/wealth/InvestmentsPage'
+import { LoanEditPage } from '../features/wealth/LoanEditPage'
+import { LoansPage } from '../features/wealth/LoansPage'
 import { Layout } from './Layout'
 
 export function App() {
@@ -32,6 +34,8 @@ export function App() {
         </Route>
         <Route path="/wealth/investments" component={InvestmentsPage} />
         <Route path="/wealth/investments/:id" component={HoldingEditPage} />
+        <Route path="/wealth/loans" component={LoansPage} />
+        <Route path="/wealth/loans/:id" component={LoanEditPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/settings/data" component={BackupPage} />
         <Route path="/settings/privacy" component={PrivacyPage} />
