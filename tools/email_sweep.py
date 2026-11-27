@@ -15,6 +15,7 @@ Line format (read by PocketLog, see src/parser/emailSweep.ts):
 Usage:
   python3 tools/email_sweep.py --list-mailboxes   # see the mailbox names Mail uses
   python3 tools/email_sweep.py --sample "UPI txn" # show one email's body, to write a pattern
+  python3 tools/email_sweep.py --mid 6b03e010     # show the one email whose Message-ID has this
   python3 tools/email_sweep.py --dry-run          # print what it would write
   python3 tools/email_sweep.py                    # write entries
   python3 tools/email_sweep.py --since 2026-11-20 # override the start date
@@ -290,11 +291,14 @@ def mask(text):
     return re.sub(r"\d{9,}", "<digits>", text)
 
 
-def sample(since, needle, count):
-    """Print the body of emails whose subject contains `needle`, to help write a pattern."""
+def sample(since, needle, count, mid=None):
+    """Print the body of emails whose subject (or Message-ID, with `mid`) contains `needle`."""
     shown = 0
     for m in list_messages(since):
-        if needle.lower() not in m["subject"].lower():
+        if mid is not None:
+            if mid not in m["mid"]:
+                continue
+        elif needle.lower() not in m["subject"].lower():
             continue
         print("=" * 70)
         print(f"From:    {m['sender']}\nSubject: {m['subject']}\nMailbox: {m['box']}\n")
@@ -303,7 +307,8 @@ def sample(since, needle, count):
         if shown >= count:
             return
     if not shown:
-        print(f"No email since {since:%Y-%m-%d} has “{needle}” in its subject.")
+        what = f"Message-ID containing “{mid}”" if mid is not None else f"“{needle}” in its subject"
+        print(f"No email since {since:%Y-%m-%d} has {what}.")
 
 
 def wanted(m):
@@ -333,6 +338,8 @@ def main():
     ap.add_argument("--since", help="YYYY-MM-DD, overrides saved last-run date")
     ap.add_argument("--sample", metavar="TEXT",
                     help="print the body of an email whose subject contains TEXT, then stop")
+    ap.add_argument("--mid", metavar="TEXT",
+                    help="print the body of the email whose Message-ID contains TEXT, then stop")
     ap.add_argument("--count", type=int, default=1, help="with --sample: how many emails to print")
     ap.add_argument("--list-mailboxes", action="store_true",
                     help="print the mailbox names Mail uses (to fill in MAILBOXES), then stop")
@@ -345,10 +352,10 @@ def main():
             sys.exit(f"Could not read Mail: {e}")
         return
 
-    if args.sample:
+    if args.sample or args.mid:
         since = datetime.strptime(args.since, "%Y-%m-%d") if args.since else datetime.now() - timedelta(days=7)
         try:
-            sample(since, args.sample, args.count)
+            sample(since, args.sample or "", args.count, args.mid)
         except RuntimeError as e:
             sys.exit(f"Could not read Mail: {e}")
         return
