@@ -13,6 +13,7 @@ Line format (read by PocketLog, see src/parser/emailSweep.ts):
   2026-11-27 | 450.00 | Swiggy | src=email via=hdfc-upi mid=<abc@mail.example>
 
 Usage:
+  python3 tools/email_sweep.py --list-mailboxes   # see the mailbox names Mail uses
   python3 tools/email_sweep.py --dry-run          # print what it would write
   python3 tools/email_sweep.py                    # write entries
   python3 tools/email_sweep.py --since 2026-11-20 # override the start date
@@ -36,7 +37,16 @@ STATE_FILE = Path.home() / ".email_sweep_state.json"
 FIRST_RUN_LOOKBACK_DAYS = 7
 OVERLAP_DAYS = 1                                      # re-scan a day for safety
 
-# Only emails whose sender contains one of these (case-insensitive) are read.
+# Mailboxes to read. "inbox" is every account's Inbox. A Gmail label shows up in Mail.app as a
+# mailbox under the Gmail account, so list its exact name here. Run with --list-mailboxes to see
+# the names Mail uses.
+MAILBOXES = ["inbox", "reference-finances-bank"]
+
+# Everything in these mailboxes is read, whoever sent it: you already filed it there on purpose.
+# Other mailboxes (the Inbox) are narrowed to the senders below.
+READ_ALL_SENDERS_IN = {"reference-finances-bank"}
+
+# Only emails whose sender contains one of these (case-insensitive) are read from other mailboxes.
 SENDERS = ["hdfcbank", "icicibank", "axisbank", "swiggy", "zomato",
            "uber", "amazon", "phonepe", "google pay", "gpay"]
 
@@ -131,6 +141,9 @@ def parse_email(sender, subject, body):
 
 
 # ------------------------------------------------------------ MAIL.APP -----
+# Arguments: year, month, day, then the mailbox names to read. For every account that has a
+# mailbox of that name (and "inbox" for all Inboxes) it lists messages received since the date.
+# Fields are separated by tabs: Message-ID, sender, subject, date, account, mailbox.
 LIST_SCRIPT = '''
 on run argv
   set cutoff to current date
@@ -139,13 +152,29 @@ on run argv
   set month of cutoff to (item 2 of argv as integer)
   set day of cutoff to (item 3 of argv as integer)
   set time of cutoff to 0
+  set wanted to items 4 thru -1 of argv
   set out to {}
   tell application "Mail"
-    set msgs to (messages of inbox whose date received is greater than or equal to cutoff)
-    repeat with m in msgs
-      set d to date received of m
-      set rec to (message id of m) & tab & (sender of m) & tab & (subject of m) & tab & (year of d as string) & "-" & ((month of d as integer) as string) & "-" & (day of d as string) & " " & (time of d as string)
-      set end of out to rec
+    repeat with boxName in wanted
+      set found to {}
+      if (boxName as string) is "inbox" then
+        set end of found to {inbox, "", "inbox"}
+      else
+        repeat with acc in accounts
+          if (exists mailbox (boxName as string) of acc) then
+            set end of found to {mailbox (boxName as string) of acc, name of acc, boxName as string}
+          end if
+        end repeat
+      end if
+      repeat with f in found
+        set mb to item 1 of f
+        set msgs to (messages of mb whose date received is greater than or equal to cutoff)
+        repeat with m in msgs
+          set d to date received of m
+          set rec to (message id of m) & tab & (sender of m) & tab & (subject of m) & tab & (year of d as string) & "-" & ((month of d as integer) as string) & "-" & (day of d as string) & " " & (time of d as string) & tab & (item 2 of f) & tab & (item 3 of f)
+          set end of out to rec
+        end repeat
+      end repeat
     end repeat
   end tell
   set AppleScript's text item delimiters to linefeed
@@ -153,17 +182,38 @@ on run argv
 end run
 '''
 
+# Arguments: Message-ID, account name, mailbox name.
 BODY_SCRIPT = '''
 on run argv
   tell application "Mail"
-    set m to first message of inbox whose message id is (item 1 of argv)
+    if (item 3 of argv) is "inbox" then
+      set mb to inbox
+    else
+      set mb to mailbox (item 3 of argv) of account (item 2 of argv)
+    end if
+    set m to first message of mb whose message id is (item 1 of argv)
     return content of m
   end tell
 end run
 '''
 
+BOXES_SCRIPT = '''
+on run
+  set out to {}
+  tell application "Mail"
+    repeat with acc in accounts
+      repeat with mb in mailboxes of acc
+        set end of out to (name of acc) & tab & (name of mb)
+      end repeat
+    end repeat
+  end tell
+  set AppleScript's text item delimiters to linefeed
+  return out as string
+end run
+'''
 
-def osa(script, *args, timeout=300):
+
+def osa(script, *args, timeout=600):
     r = subprocess.run(["osascript", "-e", script, *args],
                        capture_output=True, text=True, timeout=timeout)
     if r.returncode != 0:
@@ -172,23 +222,28 @@ def osa(script, *args, timeout=300):
 
 
 def list_messages(since):
-    out = osa(LIST_SCRIPT, str(since.year), str(since.month), str(since.day))
+    out = osa(LIST_SCRIPT, str(since.year), str(since.month), str(since.day), *MAILBOXES)
     msgs = []
     for line in out.splitlines():
         parts = line.split("\t")
-        if len(parts) < 4:
+        if len(parts) < 6:
             continue
-        mid, sender, subject, stamp = parts[0], parts[1], parts[2], parts[3]
+        mid, sender, subject, stamp, account, box = (p for p in parts[:6])
         ymd, secs = stamp.rsplit(" ", 1)
         y, mo, d = map(int, ymd.split("-"))
         when = datetime(y, mo, d) + timedelta(seconds=int(float(secs)))
-        msgs.append({"mid": mid.strip(), "sender": sender,
-                     "subject": subject, "date": when})
+        msgs.append({"mid": mid.strip(), "sender": sender, "subject": subject,
+                     "date": when, "account": account, "box": box})
     return msgs
 
 
-def get_body(mid):
-    return osa(BODY_SCRIPT, mid)[:20000]
+def get_body(m):
+    return osa(BODY_SCRIPT, m["mid"], m["account"], m["box"])[:20000]
+
+
+def wanted(m):
+    """Read everything in your own filing mailboxes; narrow the rest by sender."""
+    return m["box"] in READ_ALL_SENDERS_IN or any(k in m["sender"].lower() for k in SENDERS)
 
 
 # ---------------------------------------------------------------- MAIN -----
@@ -204,7 +259,16 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--since", help="YYYY-MM-DD, overrides saved last-run date")
+    ap.add_argument("--list-mailboxes", action="store_true",
+                    help="print the mailbox names Mail uses (to fill in MAILBOXES), then stop")
     args = ap.parse_args()
+
+    if args.list_mailboxes:
+        try:
+            print(osa(BOXES_SCRIPT).rstrip())
+        except RuntimeError as e:
+            sys.exit(f"Could not read Mail: {e}")
+        return
 
     now = datetime.now()
     if args.since:
@@ -221,17 +285,22 @@ def main():
         sys.exit(f"Could not read Mail: {e}")
 
     done = seen_ids()
-    candidates = [m for m in messages
-                  if any(k in m["sender"].lower() for k in SENDERS)
-                  and m["mid"] not in done]
-    print(f"{len(candidates)} new candidate emails since {since:%Y-%m-%d}")
+    candidates, seen = [], set(done)
+    for m in messages:
+        # The same email can appear in two mailboxes (a Gmail label and All Mail): take it once.
+        if m["mid"] in seen or not wanted(m):
+            continue
+        seen.add(m["mid"])
+        candidates.append(m)
+    print(f"{len(candidates)} new candidate emails since {since:%Y-%m-%d} "
+          f"in {', '.join(MAILBOXES)}")
 
     entries, review, failed = [], [], 0
     for m in candidates:
         if SKIP_SUBJECT.search(m["subject"]):
             continue
         try:
-            body = get_body(m["mid"])
+            body = get_body(m)
         except Exception as e:                  # one bad message must not stop the sweep
             failed += 1
             print(f"SKIP   could not read {m['mid']}: {e}")
