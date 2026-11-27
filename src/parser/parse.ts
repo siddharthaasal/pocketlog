@@ -177,6 +177,8 @@ function extractAmount(tokens: Token[]): { paise?: number; multiple: boolean } {
 interface Mention {
   account: Account
   index: number
+  /** How many words the account's name took. */
+  length: number
   preposition?: string
 }
 
@@ -202,7 +204,12 @@ function extractAccounts(tokens: Token[], accounts: readonly Account[]): Mention
       if (after && !after.used && (after.lower === 'account' || after.lower === 'a/c'))
         after.used = true
       const preposition = consumePreceding(tokens, at, ACCOUNT_PREPOSITIONS)
-      mentions.push({ account, index: at, ...(preposition ? { preposition } : {}) })
+      mentions.push({
+        account,
+        index: at,
+        length: phrase.length,
+        ...(preposition ? { preposition } : {}),
+      })
       at = findPhrase(tokens, phrase, at + phrase.length)
     }
   }
@@ -299,10 +306,17 @@ export function parseEntry(text: string, ctx: ParseContext): ParseResult {
 
   const isWithdrawal = consumeWords(tokens, WITHDRAW_WORDS)
   const saysTransfer = consumeWords(tokens, TRANSFER_WORDS) || isWithdrawal
-  const strongIncome =
-    consumeWords(tokens, INCOME_WORDS) || tokens.some((t) => INCOME_HINTS.has(t.lower))
+  // "Rohan paid me back 500": money coming in, even though "paid" is a spending word.
+  const paidMeAt = tokens.findIndex((t, i) => t.lower === 'paid' && tokens[i + 1]?.lower === 'me')
+  const paidMe = paidMeAt >= 0
+  if (paidMe) markUsed(tokens, paidMeAt, 2)
+  const incomeVerb = consumeWords(tokens, INCOME_WORDS) || paidMe
+  const incomeHint = tokens.some((t) => INCOME_HINTS.has(t.lower))
   const weakIncome = consumeWords(tokens, WEAK_INCOME_WORDS)
   const saysExpense = consumeWords(tokens, EXPENSE_WORDS)
+  // A hint like "salary" is only a hint: "paid 500 salary advance" is still spending. An
+  // explicit "received" wins over a spending word elsewhere in the sentence.
+  const strongIncome = incomeVerb || (incomeHint && !saysExpense)
 
   const mentions = extractAccounts(tokens, ctx.accounts)
   const keywordCategory = matchCategory(tokens, ctx.categories)
@@ -311,15 +325,24 @@ export function parseEntry(text: string, ctx: ParseContext): ParseResult {
   const defaultAccount = pickDefaultAccount(ctx.accounts)
 
   // Paying a credit card bill moves money to the card; it isn't spending.
-  const cardMention = mentions.find((m) => m.account.type === 'credit_card')
-  const isCardBill =
-    !saysIncome &&
-    cardMention !== undefined &&
-    tokens.some((t) => t.lower === 'bill' || t.lower === 'payment')
+  // "credit card bill", "card payment", "bill for my credit card". But "paid the electricity
+  // bill using credit card" is an expense on the card.
+  const isBillWord = (word: string | undefined) => word === 'bill' || word === 'payment'
+  const cardMention = mentions.find(
+    (m) =>
+      m.account.type === 'credit_card' &&
+      (isBillWord(tokens[m.index + m.length]?.lower) ||
+        (['for', 'of'].includes(tokens[m.index - 1]?.lower ?? '') &&
+          isBillWord(tokens[m.index - 2]?.lower)) ||
+        (['for', 'of'].includes(tokens[m.index - 2]?.lower ?? '') &&
+          ['my', 'the'].includes(tokens[m.index - 1]?.lower ?? '') &&
+          isBillWord(tokens[m.index - 3]?.lower))),
+  )
+  const isCardBill = !saysIncome && cardMention !== undefined
 
   let type: TransactionType
   if (saysTransfer || isCardBill) type = 'transfer'
-  else if (saysIncome && !saysExpense) type = 'income'
+  else if (incomeVerb || (saysIncome && !saysExpense)) type = 'income'
   else if (saysExpense) type = 'expense'
   // No verb: let the category decide ("salary 85000" is income, "lunch 350" an expense).
   else type = keywordCategory?.type === 'income' ? 'income' : 'expense'

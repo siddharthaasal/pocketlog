@@ -131,16 +131,18 @@ function matchAt(tokens: readonly Token[], i: number, today: string): Match | nu
     (day[2] || tokens[i - 1]?.lower === 'the') &&
     ['on', 'the'].includes(tokens[i - 1]?.lower ?? '')
   ) {
-    const month = Number(today.slice(5, 7))
     const n = Number(day[1])
-    const thisMonth = isValidDay(Number(today.slice(0, 4)), month, n)
-      ? iso(Number(today.slice(0, 4)), month, n)
-      : null
-    if (thisMonth && thisMonth <= today) return { start: i, length: 1, date: thisMonth }
-    const prev = fromISODate(`${today.slice(0, 7)}-01`)
-    prev.setMonth(prev.getMonth() - 1)
-    if (isValidDay(prev.getFullYear(), prev.getMonth() + 1, n))
-      return { start: i, length: 1, date: iso(prev.getFullYear(), prev.getMonth() + 1, n) }
+    // The most recent such day that has already happened, looking back up to a year
+    // (the 31st of a short month doesn't exist, so keep going).
+    const start = fromISODate(`${today.slice(0, 7)}-01`)
+    for (let back = 0; back < 12; back++) {
+      const d = new Date(start.getFullYear(), start.getMonth() - back, 1)
+      const year = d.getFullYear()
+      const month = d.getMonth() + 1
+      if (isValidDay(year, month, n) && iso(year, month, n) <= today) {
+        return { start: i, length: 1, date: iso(year, month, n) }
+      }
+    }
   }
 
   // "5/11" or "5/11/2026" (day first, as written in India)
