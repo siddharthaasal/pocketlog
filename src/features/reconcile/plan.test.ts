@@ -49,6 +49,12 @@ describe('guessEmailAccount', () => {
     expect(guessEmailAccount('icici', accounts, 'acc-hdfc')).toBe('acc-hdfc')
   })
 
+  it('maps a cash payment to the Cash account', () => {
+    expect(guessEmailAccount('uber-cash', accounts, 'acc-hdfc')).toBe('acc-cash')
+    const none = accounts.filter((a) => a.type !== 'cash')
+    expect(guessEmailAccount('uber-cash', none, 'acc-hdfc')).toBe('acc-hdfc')
+  })
+
   it('never picks an archived account', () => {
     const list = accounts.map((a) => (a.id === 'acc-hdfc' ? { ...a, archived: true } : a))
     expect(guessEmailAccount('hdfc-upi', list, 'acc-other-bank')).toBe('acc-other-bank')

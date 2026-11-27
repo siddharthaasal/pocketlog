@@ -5,14 +5,35 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from email_sweep import clean_merchant, format_line, parse_email  # noqa: E402
+from email_sweep import IGNORE, clean_merchant, format_line, parse_email  # noqa: E402
 
 
 class ParseEmail(unittest.TestCase):
-    def test_hdfc_upi(self):
-        r = parse_email("HDFC Bank <alerts@hdfcbank.net>", "UPI debit",
-                        "Rs. 450.00 has been debited from account **1234 to VPA swiggy@icici on 27-11-26")
-        self.assertEqual((r["amount"], r["merchant"], r["via"]), (450.0, "Swiggy", "hdfc-upi"))
+    def test_hdfc_upi_reads_amount_payee_and_the_spend_date(self):
+        body = ("Dear Customer,\n\nGreetings from HDFC Bank!\n\nRs.91.00 is debited from your account ending 1234 "
+                "towards VPA ******3345@okhdfcbank (RAVI K) on 27-11-26.\n\nUPI transaction reference no.: 123456789012.\n")
+        r = parse_email("HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>",
+                        "\u2757  You have done a UPI txn. Check details!", body)
+        self.assertEqual((r["amount"], r["merchant"], r["via"]), (91.0, "Ravi K", "hdfc-upi"))
+        self.assertEqual(r["date"], datetime(2026, 11, 27))
+
+    def test_hdfc_account_update_credit_is_not_a_spend(self):
+        body = ("We're writing to inform you that Rs.1.00 has been successfully credited to your HDFC Bank "
+                "account ending in 1234.\nSender: SOME SHOP PVT LTD (VPA: *****@axisbank)")
+        self.assertIs(parse_email("alerts@hdfcbank.bank.in", "View: Account update for your HDFC Bank A/c", body), IGNORE)
+
+    def test_uber_receipt_reads_total_date_and_how_it_was_paid(self):
+        body = ("\ufffc\nNov 25, 2026\n7:32 PM\n\nThanks for riding, Priya\n\nTotal\n\u20b9105.26\n \n"
+                "Suggested fare\n\u20b9105.26\n \nPayments\n\ufffc\nCash\n\u20b9105.26\n11/25/26 7:47 PM\n")
+        r = parse_email("Uber Receipts <noreply@uber.com>", "Your Wednesday evening trip with Uber", body)
+        self.assertEqual((r["amount"], r["merchant"], r["via"]), (105.26, "Uber", "uber-cash"))
+        self.assertEqual(r["date"], datetime(2026, 11, 25))
+
+    def test_uber_trip_paid_by_card_or_upi(self):
+        base = "Nov 25, 2026\nTotal\n\u20b9200.00\nPayments\n\ufffc\n%s\n\u20b9200.00\n"
+        for mode, via in [("UPI", "uber-upi"), ("Visa \u2022\u2022\u2022\u20221234", "uber-card"), ("Wallet", "uber")]:
+            r = parse_email("noreply@uber.com", "Your Wednesday evening trip with Uber", base % mode)
+            self.assertEqual(r["via"], via, mode)
 
     def test_hdfc_card(self):
         r = parse_email("alerts@hdfcbank.net", "Card spend",
@@ -27,7 +48,7 @@ class ParseEmail(unittest.TestCase):
 
     def test_skips_refunds_otps_and_offers(self):
         for subject in ["Refund processed", "Your OTP is 123456", "Big offer today", "Statement ready"]:
-            self.assertIsNone(parse_email("a@hdfcbank.net", subject, "Rs. 100 has been debited"))
+            self.assertIs(parse_email("a@hdfcbank.net", subject, "Rs. 100 has been debited"), IGNORE)
 
     def test_amazon_pay_puts_the_payment_in_the_subject(self):
         r = parse_email("Amazon Pay India <no-reply@amazonpay.in>",
@@ -42,7 +63,7 @@ class ParseEmail(unittest.TestCase):
              "Swift Copy for Cross-Border Remittance \u2013 Ref: 201126BTT10303 \u2013 USD 532,66"),
             ("Google Payments <payments-noreply@google.com>", "Your Chrome Web Store order has been canceled"),
         ]:
-            self.assertIsNone(parse_email(sender, subject, "Total: Rs. 150.00"), subject)
+            self.assertIs(parse_email(sender, subject, "Total: Rs. 150.00"), IGNORE, subject)
 
     def test_hdfc_debit_card_amount_comes_from_the_subject(self):
         r = parse_email("HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>",
@@ -61,7 +82,7 @@ class ParseEmail(unittest.TestCase):
                         "Share your Uber experience", "We'd like to hear from you!",
                         "Get 20% off 2 Uber Black airport rides for the holidays",
                         "Help make Amazon Pay better. Your feedback matters to us."]:
-            self.assertIsNone(parse_email("noreply@uber.com", subject, "Total \u20b9150"), subject)
+            self.assertIs(parse_email("noreply@uber.com", subject, "Total \u20b9150"), IGNORE, subject)
 
     def test_the_masking_hides_long_numbers_only(self):
         from email_sweep import mask

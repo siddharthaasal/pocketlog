@@ -68,18 +68,6 @@ def format_line(e):
 # A digit first, so a lone comma can never be read as an amount.
 NUM = r"(?P<amount>\d[\d,]*(?:\.\d{1,2})?)"
 
-# Bank templates: starting points. Check them against your real emails and tweak.
-BANK_TEMPLATES = [
-    ("hdfc-upi", "hdfcbank",
-     rf"Rs\.?\s?{NUM}\s+has been debited from account\s+\**\d+\s+to VPA\s+(?P<merchant>\S+)"),
-    ("hdfc-card", "hdfcbank",
-     rf"Rs\.?\s?{NUM}\s+(?:is|has been)\s+debited from your HDFC Bank Credit Card.*?towards\s+(?P<merchant>.+?)\s+on"),
-    ("icici", "icicibank",
-     rf"debited with INR\s?{NUM}.*?Info:\s*(?P<merchant>\S+)"),
-    ("axis", "axisbank",
-     rf"(?:INR|Rs\.?)\s?{NUM}\s+(?:debited|spent).*?(?:at|to)\s+(?P<merchant>.+?)(?:\s+on|\.|\n)"),
-]
-
 # Generic merchant receipts: look for a total near a label.
 GENERIC_TOTAL = re.compile(
     r"(?:grand total|total paid|amount paid|order total|total amount|total)"
@@ -93,20 +81,43 @@ SKIP_SUBJECT = re.compile(
     r"forex conversion|feedback|share your|hear from you|help make|your experience|research)\b"
     r"|\d+% off", re.I)
 
-# Some senders put the whole payment in the subject line.
-SUBJECT_TEMPLATES = [
-    ("amazonpay", "amazonpay",
-     r"payment of\s*(?:Rs\.?|INR|₹)?\s*(?P<amount>\d[\d,]*(?:\.\d{1,2})?)\s*to\s+"
-     r"(?P<merchant>.+?)\s+was successful"),
+# Each template: (via, sender contains, where to look, pattern). Patterns name their groups:
+# amount (required), merchant, and date (the day of the spend, which beats the day the email
+# arrived). `via` is written to the line and tells PocketLog which account probably paid.
+TEMPLATES = [
+    # "Your payment of ₹ 1191.42 to BOOKMYSHOW was successful": all in the subject.
+    ("amazonpay", "amazonpay", "subject",
+     r"payment of\s*(?:Rs\.?|INR|₹)?\s*" + NUM + r"\s*to\s+(?P<merchant>.+?)\s+was successful"),
     # "Rs.467.65 debited via Debit Card **2663": the amount is in the subject, the merchant in the body.
-    ("hdfc-debit", "hdfcbank",
-     r"Rs\.?\s?(?P<amount>\d[\d,]*(?:\.\d{1,2})?)\s+debited via Debit Card"),
+    ("hdfc-debit", "hdfcbank", "subject",
+     r"Rs\.?\s?" + NUM + r"\s+debited via Debit Card"),
+    # "Rs.91.00 is debited from your account ending 1234 towards VPA ******3345@okhdfcbank (RAVI K) on 27-11-26."
+    ("hdfc-upi", "hdfcbank", "body",
+     r"Rs\.?\s?" + NUM + r"\s+is debited from your account ending\s+\d+\s+towards VPA\s+\S+"
+     r"\s+\((?P<merchant>[^)]+)\)\s+on\s+(?P<date>\d{2}-\d{2}-\d{2,4})"),
+    # Guesses: check them against a real email and tweak.
+    ("hdfc-card", "hdfcbank", "body",
+     r"Rs\.?\s?" + NUM + r"\s+(?:is|has been)\s+debited from your HDFC Bank Credit Card.*?towards\s+"
+     r"(?P<merchant>.+?)\s+on"),
+    ("icici", "icicibank", "body", r"debited with INR\s?" + NUM + r".*?Info:\s*(?P<merchant>\S+)"),
+    ("axis", "axisbank", "body",
+     r"(?:INR|Rs\.?)\s?" + NUM + r"\s+(?:debited|spent).*?(?:at|to)\s+(?P<merchant>.+?)(?:\s+on|\.|\n)"),
+    # Uber receipt: "Total\n₹105.26", the date at the top ("Nov 25, 2026").
+    ("uber", "uber", "body",
+     r"(?P<date>[A-Z][a-z]{2} \d{1,2}, \d{4}).*?\bTotal\s+(?:₹|Rs\.?)\s?" + NUM),
 ]
+
+# Uber lists how the trip was paid, after "Payments" ("Cash", "UPI", a card...).
+UBER_PAYMENT = re.compile(r"Payments\s+(?:\ufffc\s*)*(?P<pay>[^\n]+?)\s*\n\s*(?:₹|Rs)")
 
 # Best-effort merchant from a body, for templates that only have the amount in the subject.
 BODY_MERCHANT = re.compile(
     r"(?:\bat|towards|\bto|merchant:?)\s+(?P<merchant>[A-Za-z0-9][A-Za-z0-9 .&'*-]{2,40}?)"
     r"\s+(?:on|at|ref|\.)", re.I)
+
+# Mail from your bank that reports money coming in is not a spend. Remembered, so it isn't re-read.
+SKIP_BODY = re.compile(r"successfully credited|has been credited|credited to your", re.I)
+IGNORE = object()
 
 
 def to_float(s):
@@ -126,29 +137,46 @@ def clean_merchant(raw, sender):
     return m.title() if m.islower() or m.isupper() else m
 
 
+def parse_when(text):
+    for fmt in ("%d-%m-%y", "%d-%m-%Y", "%b %d, %Y"):
+        try:
+            return datetime.strptime(text.strip(), fmt)
+        except ValueError:
+            pass
+    return None
+
+
 def parse_email(sender, subject, body):
-    """Return dict(amount, merchant, via) or None."""
+    """Return dict(amount, merchant, via[, date]), IGNORE for mail that is known not to be a
+    spend, or None when it can't be read."""
     if SKIP_SUBJECT.search(subject):
-        return None
+        return IGNORE
     s = sender.lower()
-    for name, sender_key, pattern in SUBJECT_TEMPLATES:
-        if sender_key in s:
-            m = re.search(pattern, subject, re.I)
-            if m:
-                found = m.groupdict().get("merchant")
-                if not found:
-                    guess = BODY_MERCHANT.search(body)
-                    found = guess["merchant"] if guess else "Debit card"
-                return {"amount": to_float(m["amount"]),
-                        "merchant": clean_merchant(found, sender),
-                        "via": name}
-    for name, sender_key, pattern in BANK_TEMPLATES:
-        if sender_key in s:
-            m = re.search(pattern, body, re.I | re.S)
-            if m:
-                return {"amount": to_float(m["amount"]),
-                        "merchant": clean_merchant(m["merchant"], sender),
-                        "via": name}
+    for via, sender_key, where, pattern in TEMPLATES:
+        if sender_key not in s:
+            continue
+        m = re.search(pattern, subject if where == "subject" else body, re.I | re.S)
+        if not m:
+            continue
+        found = m.groupdict().get("merchant")
+        if not found and via == "hdfc-debit":
+            guess = BODY_MERCHANT.search(body)
+            found = guess["merchant"] if guess else "Debit card"
+        out = {"amount": to_float(m["amount"]),
+               "merchant": clean_merchant(found, sender), "via": via}
+        when = parse_when(m.groupdict().get("date") or "")
+        if when:
+            out["date"] = when
+        if via == "uber":
+            pay = UBER_PAYMENT.search(body)
+            mode = (pay["pay"].strip().lower() if pay else "")
+            out["via"] = ("uber-cash" if mode == "cash" else
+                          "uber-upi" if "upi" in mode else
+                          "uber-card" if any(k in mode for k in ("card", "visa", "master")) else
+                          "uber")
+        return out
+    if SKIP_BODY.search(body):
+        return IGNORE
     m = GENERIC_TOTAL.search(body)
     if m:
         return {"amount": to_float(m["amount"]),
@@ -284,8 +312,15 @@ def wanted(m):
 
 
 # ---------------------------------------------------------------- MAIN -----
+def read_state():
+    try:
+        return json.loads(STATE_FILE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
 def seen_ids():
-    ids = set()
+    ids = set(read_state().get("ignored", []))
     for f in (LOG_FILE, REVIEW_FILE):
         if f.exists():
             ids.update(re.findall(r"mid=(\S+)", f.read_text(errors="ignore")))
@@ -322,7 +357,7 @@ def main():
     if args.since:
         since = datetime.strptime(args.since, "%Y-%m-%d")
     elif STATE_FILE.exists():
-        last = datetime.fromisoformat(json.loads(STATE_FILE.read_text())["last_run"])
+        last = datetime.fromisoformat(read_state()["last_run"])
         since = last - timedelta(days=OVERLAP_DAYS)
     else:
         since = now - timedelta(days=FIRST_RUN_LOOKBACK_DAYS)
@@ -343,9 +378,10 @@ def main():
     print(f"{len(candidates)} new candidate emails since {since:%Y-%m-%d} "
           f"in {', '.join(MAILBOXES)}")
 
-    entries, review, failed = [], [], 0
+    entries, review, failed, ignored = [], [], 0, []
     for m in candidates:
         if SKIP_SUBJECT.search(m["subject"]):
+            ignored.append(m["mid"])
             continue
         try:
             body = get_body(m)
@@ -354,7 +390,9 @@ def main():
             print(f"SKIP   could not read {m['mid']}: {e}")
             continue
         res = parse_email(m["sender"], m["subject"], body)
-        if res:
+        if res is IGNORE:
+            ignored.append(m["mid"])
+        elif res:
             entries.append(format_line({**m, **res}))
         else:
             review.append(f"{m['date']:%Y-%m-%d} | {m['sender']} | {m['subject']} | mid={m['mid']}")
@@ -374,8 +412,9 @@ def main():
                 f.write("\n".join(review) + "\n")
         # Only move the start date forward when every message was read, so a failure is retried.
         if not failed:
-            STATE_FILE.write_text(json.dumps({"last_run": now.isoformat()}))
-    print(f"{len(entries)} entries, {len(review)} need review"
+            keep = sorted(set(read_state().get("ignored", [])) | set(ignored))[-5000:]
+            STATE_FILE.write_text(json.dumps({"last_run": now.isoformat(), "ignored": keep}))
+    print(f"{len(entries)} entries, {len(review)} need review, {len(ignored)} not spends"
           + (f", {failed} could not be read" if failed else "")
           + (" (dry run, nothing written)" if args.dry_run else ""))
 

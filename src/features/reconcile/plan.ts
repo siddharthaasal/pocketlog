@@ -167,6 +167,7 @@ export function toEntry(item: MissingItem, draft: Draft, layer: Layer = 'bank'):
 function emailPaymentMethod(via: string | undefined): TransactionInput['paymentMethod'] {
   if (via?.endsWith('upi')) return 'upi'
   if (via?.endsWith('card')) return 'card'
+  if (via?.endsWith('cash')) return 'cash'
   return 'other'
 }
 
@@ -210,6 +211,10 @@ export function guessEmailAccount(
   fallback: string,
 ): string {
   const usable = accounts.filter((a) => !a.archived && !a.deletedAt && a.type !== 'cash')
+  // "uber-cash": paid in cash, so it came out of the Cash account.
+  if (via?.endsWith('cash')) {
+    return accounts.find((a) => a.type === 'cash' && !a.archived && !a.deletedAt)?.id ?? fallback
+  }
   const bank = via?.split('-')[0]
   const named = (a: Account) =>
     !!bank && (a.name.toLowerCase().includes(bank) || a.aliases.some((x) => x.includes(bank)))
