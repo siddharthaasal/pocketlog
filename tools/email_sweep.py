@@ -14,6 +14,7 @@ Line format (read by PocketLog, see src/parser/emailSweep.ts):
 
 Usage:
   python3 tools/email_sweep.py --list-mailboxes   # see the mailbox names Mail uses
+  python3 tools/email_sweep.py --sample "UPI txn" # show one email's body, to write a pattern
   python3 tools/email_sweep.py --dry-run          # print what it would write
   python3 tools/email_sweep.py                    # write entries
   python3 tools/email_sweep.py --since 2026-11-20 # override the start date
@@ -84,17 +85,28 @@ GENERIC_TOTAL = re.compile(
     r"(?:grand total|total paid|amount paid|order total|total amount|total)"
     r"[^\d\n]{0,25}(?:Rs\.?|INR|₹)?\s?(?P<amount>\d[\d,]*(?:\.\d{1,2})?)", re.I)
 
-# Subjects that are never a spend: wallet top-ups, cancelled orders, remittance paperwork...
+# Subjects that are never a spend: wallet top-ups, cancelled or failed payments, remittance
+# paperwork, fee notices, and marketing or feedback requests.
 SKIP_SUBJECT = re.compile(
-    r"\b(otp|one[- ]time|refund(?:ed)?|credited|failed|declined|statement|offer|reward|"
-    r"cashback|reminder|newsletter|cancell?ed|added to your|swift copy|remittance)\b", re.I)
+    r"\b(otp|one[- ]time|refund(?:ed)?|credited|failed|declined|unsuccessful|statement|offer|"
+    r"reward|cashback|reminder|newsletter|cancell?ed|added to your|swift copy|remittance|"
+    r"forex conversion|feedback|share your|hear from you|help make|your experience|research)\b"
+    r"|\d+% off", re.I)
 
 # Some senders put the whole payment in the subject line.
 SUBJECT_TEMPLATES = [
     ("amazonpay", "amazonpay",
      r"payment of\s*(?:Rs\.?|INR|₹)?\s*(?P<amount>\d[\d,]*(?:\.\d{1,2})?)\s*to\s+"
      r"(?P<merchant>.+?)\s+was successful"),
+    # "Rs.467.65 debited via Debit Card **2663": the amount is in the subject, the merchant in the body.
+    ("hdfc-debit", "hdfcbank",
+     r"Rs\.?\s?(?P<amount>\d[\d,]*(?:\.\d{1,2})?)\s+debited via Debit Card"),
 ]
+
+# Best-effort merchant from a body, for templates that only have the amount in the subject.
+BODY_MERCHANT = re.compile(
+    r"(?:\bat|towards|\bto|merchant:?)\s+(?P<merchant>[A-Za-z0-9][A-Za-z0-9 .&'*-]{2,40}?)"
+    r"\s+(?:on|at|ref|\.)", re.I)
 
 
 def to_float(s):
@@ -123,8 +135,12 @@ def parse_email(sender, subject, body):
         if sender_key in s:
             m = re.search(pattern, subject, re.I)
             if m:
+                found = m.groupdict().get("merchant")
+                if not found:
+                    guess = BODY_MERCHANT.search(body)
+                    found = guess["merchant"] if guess else "Debit card"
                 return {"amount": to_float(m["amount"]),
-                        "merchant": clean_merchant(m["merchant"], sender),
+                        "merchant": clean_merchant(found, sender),
                         "via": name}
     for name, sender_key, pattern in BANK_TEMPLATES:
         if sender_key in s:
@@ -241,6 +257,27 @@ def get_body(m):
     return osa(BODY_SCRIPT, m["mid"], m["account"], m["box"])[:20000]
 
 
+def mask(text):
+    """Hide long digit runs (account and reference numbers) before a body is shown."""
+    return re.sub(r"\d{9,}", "<digits>", text)
+
+
+def sample(since, needle, count):
+    """Print the body of emails whose subject contains `needle`, to help write a pattern."""
+    shown = 0
+    for m in list_messages(since):
+        if needle.lower() not in m["subject"].lower():
+            continue
+        print("=" * 70)
+        print(f"From:    {m['sender']}\nSubject: {m['subject']}\nMailbox: {m['box']}\n")
+        print(mask(get_body(m))[:3000].strip())
+        shown += 1
+        if shown >= count:
+            return
+    if not shown:
+        print(f"No email since {since:%Y-%m-%d} has “{needle}” in its subject.")
+
+
 def wanted(m):
     """Read everything in your own filing mailboxes; narrow the rest by sender."""
     return m["box"] in READ_ALL_SENDERS_IN or any(k in m["sender"].lower() for k in SENDERS)
@@ -259,6 +296,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--since", help="YYYY-MM-DD, overrides saved last-run date")
+    ap.add_argument("--sample", metavar="TEXT",
+                    help="print the body of an email whose subject contains TEXT, then stop")
+    ap.add_argument("--count", type=int, default=1, help="with --sample: how many emails to print")
     ap.add_argument("--list-mailboxes", action="store_true",
                     help="print the mailbox names Mail uses (to fill in MAILBOXES), then stop")
     args = ap.parse_args()
@@ -266,6 +306,14 @@ def main():
     if args.list_mailboxes:
         try:
             print(osa(BOXES_SCRIPT).rstrip())
+        except RuntimeError as e:
+            sys.exit(f"Could not read Mail: {e}")
+        return
+
+    if args.sample:
+        since = datetime.strptime(args.since, "%Y-%m-%d") if args.since else datetime.now() - timedelta(days=7)
+        try:
+            sample(since, args.sample, args.count)
         except RuntimeError as e:
             sys.exit(f"Could not read Mail: {e}")
         return

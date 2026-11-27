@@ -44,6 +44,29 @@ class ParseEmail(unittest.TestCase):
         ]:
             self.assertIsNone(parse_email(sender, subject, "Total: Rs. 150.00"), subject)
 
+    def test_hdfc_debit_card_amount_comes_from_the_subject(self):
+        r = parse_email("HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>",
+                        "Rs.3220.46 debited via Debit Card **2663",
+                        "Dear Customer, Rs.3220.46 has been debited from your account via Debit Card **2663 at AMAZON PAY on 22-11-26.")
+        self.assertEqual((r["amount"], r["via"]), (3220.46, "hdfc-debit"))
+        self.assertEqual(r["merchant"], "Amazon")  # the alias list tidies the name
+
+    def test_hdfc_debit_card_without_a_readable_merchant_still_has_the_amount(self):
+        r = parse_email("alerts@hdfcbank.bank.in", "Rs.467.65 debited via Debit Card **2663", "No details.")
+        self.assertEqual((r["amount"], r["merchant"]), (467.65, "Debit card"))
+
+    def test_skips_marketing_and_failed_payments(self):
+        for subject in ["Payment Unsuccessful - HDFC Bank Debit Card ending with 2663",
+                        "Important: Forex Conversion Markup Fee on cross border transaction using Debit Card Transaction",
+                        "Share your Uber experience", "We'd like to hear from you!",
+                        "Get 20% off 2 Uber Black airport rides for the holidays",
+                        "Help make Amazon Pay better. Your feedback matters to us."]:
+            self.assertIsNone(parse_email("noreply@uber.com", subject, "Total \u20b9150"), subject)
+
+    def test_the_masking_hides_long_numbers_only(self):
+        from email_sweep import mask
+        self.assertEqual(mask("Ref 1234567890123 Rs 450.00 A/c **1234"), "Ref <digits> Rs 450.00 A/c **1234")
+
     def test_a_lone_comma_is_not_an_amount(self):
         # Used to raise ValueError: could not convert string to float: ','
         self.assertIsNone(parse_email("x@amazon.in", "Your order", "Total: ,"))
