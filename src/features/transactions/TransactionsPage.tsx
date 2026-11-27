@@ -1,6 +1,14 @@
 import type { ReactNode, SelectHTMLAttributes } from 'react'
 import { Link, useSearchParams } from 'wouter'
-import { Card, EmptyState, Loading, Money, PageHeader, TextInput } from '../../components/ui'
+import {
+  Card,
+  EmptyState,
+  FitSelect,
+  Loading,
+  Money,
+  PageHeader,
+  TextInput,
+} from '../../components/ui'
 import { useAllTransactions, useLookups } from '../../data/hooks'
 import {
   SORT_ORDERS,
@@ -14,6 +22,7 @@ import { TRANSACTION_TYPES, type Transaction, type TransactionType } from '../..
 import { cx } from '../../lib/cx'
 import { currentMonth, formatDayHeading, monthBounds, shiftMonth, todayISO } from '../../lib/dates'
 import { TransactionRow } from './TransactionRow'
+import { TransactionsTable } from './TransactionsTable'
 
 const PERIODS = {
   all: 'All time',
@@ -292,28 +301,37 @@ export function TransactionsPage() {
             Clear filters
           </button>
         </EmptyState>
-      ) : byDate ? (
-        <div className="space-y-5">
-          {groupByDay(results).map((g) => (
-            <section key={g.date}>
-              <div className="mb-2 flex items-baseline justify-between px-1 text-[13px] font-medium text-muted">
-                <h2>{formatDayHeading(g.date)}</h2>
-                {g.spent > 0 && <Money paise={g.spent} />}
+      ) : (
+        <>
+          <div className="hidden md:block">
+            <TransactionsTable transactions={results} lookups={lookups} />
+          </div>
+          <div className="md:hidden">
+            {byDate ? (
+              <div className="space-y-5">
+                {groupByDay(results).map((g) => (
+                  <section key={g.date}>
+                    <div className="mb-2 flex items-baseline justify-between px-1 text-[13px] font-medium text-muted">
+                      <h2>{formatDayHeading(g.date)}</h2>
+                      {g.spent > 0 && <Money paise={g.spent} />}
+                    </div>
+                    <Card className="divide-y divide-border overflow-hidden">
+                      {g.items.map((t) => (
+                        <TransactionRow key={t.id} t={t} lookups={lookups} />
+                      ))}
+                    </Card>
+                  </section>
+                ))}
               </div>
+            ) : (
               <Card className="divide-y divide-border overflow-hidden">
-                {g.items.map((t) => (
-                  <TransactionRow key={t.id} t={t} lookups={lookups} />
+                {results.map((t) => (
+                  <TransactionRow key={t.id} t={t} lookups={lookups} showDate />
                 ))}
               </Card>
-            </section>
-          ))}
-        </div>
-      ) : (
-        <Card className="divide-y divide-border overflow-hidden">
-          {results.map((t) => (
-            <TransactionRow key={t.id} t={t} lookups={lookups} showDate />
-          ))}
-        </Card>
+            )}
+          </div>
+        </>
       )}
     </>
   )
@@ -322,22 +340,19 @@ export function TransactionsPage() {
 function Chip({
   active,
   children,
-  className,
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement> & { active: boolean; children: ReactNode }) {
   return (
-    <select
+    <FitSelect
       className={cx(
-        // 16px text: iOS zooms into smaller form controls.
-        'h-9 shrink-0 appearance-none rounded-full border px-3.5 text-[16px] outline-none focus-visible:border-accent',
+        'h-9 shrink-0 rounded-md border px-3 text-[14.5px]',
         active
           ? 'border-accent bg-accent/10 font-medium text-text'
           : 'border-border bg-surface text-text',
-        className,
       )}
       {...props}
     >
       {children}
-    </select>
+    </FitSelect>
   )
 }

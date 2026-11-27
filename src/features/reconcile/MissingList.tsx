@@ -18,7 +18,7 @@ import {
   Td,
   Th,
   Tr,
-} from './table'
+} from '../../components/table'
 
 interface Props {
   items: MissingItem[]
@@ -118,7 +118,7 @@ export function MissingList({ items, transactions, categories, accounts }: Props
         </span>
       </div>
 
-      <Table minWidth={820}>
+      <Table minWidth={980}>
         <thead>
           <tr>
             <Th className="w-9" />

@@ -16,7 +16,7 @@ export function MonthSwitcher({
       <Heading
         className={
           Heading === 'h1'
-            ? 'text-[28px] font-semibold tracking-tight'
+            ? 'text-[30px] leading-tight font-bold tracking-[-0.03em]'
             : 'text-[17px] font-semibold tracking-tight'
         }
       >
@@ -55,7 +55,7 @@ function MonthButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className="flex h-11 w-11 items-center justify-center rounded-full text-accent hover:bg-surface-2 disabled:text-muted disabled:opacity-40"
+      className="flex h-10 w-10 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-text disabled:text-muted disabled:opacity-40"
     >
       {children}
     </button>

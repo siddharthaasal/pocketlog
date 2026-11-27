@@ -19,7 +19,7 @@ import {
   Td,
   Th,
   Tr,
-} from './table'
+} from '../../components/table'
 
 const signed = (t: Pick<Transaction, 'type' | 'amount'>) =>
   t.type === 'expense' ? -t.amount : t.amount

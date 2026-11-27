@@ -8,7 +8,7 @@ import { newId } from '../../lib/ids'
 import { ConflictsList, ExtraList, IgnoredList, MatchedList } from './sections'
 import { MissingList } from './MissingList'
 import { buildPlan, guessAccount, type LoadedStatement } from './plan'
-import { ViewTabs } from './table'
+import { ViewTabs } from '../../components/table'
 
 type Tab = 'missing' | 'conflicts' | 'matched' | 'extra'
 
@@ -64,7 +64,7 @@ export function ReconcilePage() {
     <>
       <PageHeader title="Reconcile" />
       <div className="space-y-6">
-        <div className="max-w-3xl space-y-6">
+        <div className="space-y-6">
           <Card className="space-y-3 p-5">
             <p className="text-[15px]">
               Add your bank statement (.xls, .xlsx or .csv). PocketLog compares it with what you’ve
@@ -72,7 +72,7 @@ export function ReconcilePage() {
               on this device and never uploaded.
             </p>
             <label
-              className={`flex h-12 cursor-pointer items-center justify-center rounded-xl bg-accent text-[15px] font-medium text-accent-fg hover:opacity-90 ${reading ? 'pointer-events-none opacity-40' : ''}`}
+              className={`inline-flex h-10 w-fit cursor-pointer items-center justify-center rounded-lg bg-accent px-5 text-[14.5px] font-medium text-accent-fg hover:opacity-90 ${reading ? 'pointer-events-none opacity-40' : ''}`}
             >
               {reading
                 ? 'Reading…'
@@ -115,6 +115,7 @@ export function ReconcilePage() {
               </div>
               <Field label="This statement is for">
                 <Select
+                  className="max-w-xs"
                   value={f.accountId}
                   onChange={(e) =>
                     setFiles((cur) =>
