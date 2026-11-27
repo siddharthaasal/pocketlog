@@ -14,6 +14,7 @@ import {
   unignoreRecurring,
 } from './subscriptions'
 import { suggestRecurring } from '../domain/recurring'
+import { markRenewed, savePolicy } from './policies'
 import { saveHolding, saveValuations, setHoldingArchived } from './investments'
 import { monthRowId, removeRecord, saveAccountBalance, saveRecord } from './records'
 import { addTransaction, updateTransaction } from './repo'
@@ -294,5 +295,26 @@ describe('subscriptions data', () => {
     expect((await db.meta.get('subscriptions.ignore'))?.value).toEqual(['cafe'])
     await unignoreRecurring('cafe')
     expect((await db.meta.get('subscriptions.ignore'))?.value).toEqual([])
+  })
+})
+
+describe('policies data', () => {
+  it('moves the renewal a period on when a premium is marked paid', async () => {
+    const policy = await savePolicy({
+      name: 'Term cover',
+      kind: 'term',
+      insurer: 'HDFC Life',
+      premium: 18_000_00,
+      frequency: 'yearly',
+      renewalDate: '2026-12-12',
+    })
+    await markRenewed(policy.id, '2026-11-27')
+    expect((await db.policies.get(policy.id))?.renewalDate).toBe('2027-12-12')
+  })
+
+  it('rejects a policy with no premium', async () => {
+    await expect(
+      savePolicy({ name: 'x', kind: 'health', insurer: 'y', premium: 0, frequency: 'yearly' }),
+    ).rejects.toThrow()
   })
 })

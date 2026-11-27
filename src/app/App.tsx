@@ -18,6 +18,8 @@ import { LoanEditPage } from '../features/wealth/LoanEditPage'
 import { LoansPage } from '../features/wealth/LoansPage'
 import { SubscriptionEditPage } from '../features/wealth/SubscriptionEditPage'
 import { SubscriptionsPage } from '../features/wealth/SubscriptionsPage'
+import { InsurancePage } from '../features/wealth/InsurancePage'
+import { PolicyEditPage } from '../features/wealth/PolicyEditPage'
 import { Layout } from './Layout'
 
 export function App() {
@@ -40,6 +42,8 @@ export function App() {
         <Route path="/wealth/loans/:id" component={LoanEditPage} />
         <Route path="/wealth/subscriptions" component={SubscriptionsPage} />
         <Route path="/wealth/subscriptions/:id" component={SubscriptionEditPage} />
+        <Route path="/wealth/insurance" component={InsurancePage} />
+        <Route path="/wealth/insurance/:id" component={PolicyEditPage} />
         <Route path="/settings" component={SettingsPage} />
         <Route path="/settings/data" component={BackupPage} />
         <Route path="/settings/privacy" component={PrivacyPage} />
