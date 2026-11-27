@@ -227,7 +227,7 @@ export function MissingList({ items, transactions, categories, accounts, layer =
                             .filter((c) => c.type === type && !c.archived)
                             .map((c) => (
                               <option key={c.id} value={`cat:${c.id}`}>
-                                {c.icon} {c.name}
+                                {c.name}
                               </option>
                             ))}
                         </optgroup>

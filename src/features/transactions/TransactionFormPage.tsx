@@ -42,6 +42,7 @@ import {
 import { formatShortDate, todayISO } from '../../lib/dates'
 import { goBack } from '../../lib/navigation'
 import { resolveInboxEntry } from '../../data/inbox'
+import { CategoryIcon } from '../../components/categoryIcons'
 import { MicIcon } from '../../components/icons'
 import { ISSUE_MESSAGES, parseEntry, type ParseIssue, type ParseResult } from '../../parser/parse'
 import type { AddFromTextState } from '../inbox/InboxPage'
@@ -410,9 +411,7 @@ function TransactionForm({
                     : 'border-border bg-surface text-muted hover:bg-surface-2',
                 )}
               >
-                <span className="text-[20px]" aria-hidden="true">
-                  {c.icon}
-                </span>
+                <CategoryIcon icon={c.icon} size={22} />
                 {c.name}
               </button>
             ))}

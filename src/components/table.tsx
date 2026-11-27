@@ -1,3 +1,4 @@
+import { CalendarDays, CircleChevronDown, Hash, Table2, Type } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cx } from '../lib/cx'
 import { FitSelect } from './ui'
@@ -187,49 +188,13 @@ export function ViewTabs<T extends string>({
 
 // ---------- Property-type glyphs (shown in column headers) ----------
 
-const glyph = (children: ReactNode) => (
-  <svg
-    viewBox="0 0 16 16"
-    width={14}
-    height={14}
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.4}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    {children}
-  </svg>
-)
+const GLYPH = { size: 14, strokeWidth: 1.6, color: 'var(--icon)', 'aria-hidden': true } as const
 
-export const TableGlyph = () =>
-  glyph(
-    <>
-      <rect x="2" y="3" width="12" height="10" rx="1.5" />
-      <path d="M2 7h12M6.5 7v6" />
-    </>,
-  )
-export const CalendarGlyph = () =>
-  glyph(
-    <>
-      <rect x="2.5" y="3.5" width="11" height="10" rx="1.5" />
-      <path d="M2.5 7h11M5.5 2v3M10.5 2v3" />
-    </>,
-  )
-export const TextGlyph = () => (
-  <span aria-hidden="true" className="text-[11px] leading-none font-semibold tracking-tight">
-    Aa
-  </span>
-)
-export const NumberGlyph = () => glyph(<path d="M6 3 5 13M11 3l-1 10M3 6h10M2.5 10h10" />)
-export const SelectGlyph = () =>
-  glyph(
-    <>
-      <circle cx="8" cy="8" r="5.5" />
-      <path d="m6 7 2 2 2-2" />
-    </>,
-  )
+export const TableGlyph = () => <Table2 {...GLYPH} />
+export const CalendarGlyph = () => <CalendarDays {...GLYPH} />
+export const TextGlyph = () => <Type {...GLYPH} />
+export const NumberGlyph = () => <Hash {...GLYPH} />
+export const SelectGlyph = () => <CircleChevronDown {...GLYPH} />
 
 /** The small grey dot Notion puts in front of a status tag. */
 export const Dot = ({ color = '#9b9a97' }: { color?: string }) => (

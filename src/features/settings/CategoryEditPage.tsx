@@ -9,6 +9,7 @@ import {
   Segmented,
   TextInput,
 } from '../../components/ui'
+import { CATEGORY_ICONS, type CategoryIconKey } from '../../components/categoryIcons'
 import { cx } from '../../lib/cx'
 import { useCategories } from '../../data/hooks'
 import { addCategory, updateCategory } from '../../data/repo'
@@ -64,7 +65,7 @@ function CategoryForm({
   const [, navigate] = useLocation()
   const [type, setType] = useState<CategoryType>(existing?.type ?? initialType)
   const [name, setName] = useState(existing?.name ?? '')
-  const [icon, setIcon] = useState(existing?.icon ?? '📦')
+  const [icon, setIcon] = useState(existing?.icon ?? 'package')
   const [color, setColor] = useState(existing?.color ?? COLORS[0]!)
   const [keywords, setKeywords] = useState(existing?.keywords.join(', ') ?? '')
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -95,23 +96,38 @@ function CategoryForm({
         {!existing && <Segmented value={type} options={TYPE_OPTIONS} onChange={setType} />}
 
         <div className="flex items-end gap-3">
-          <CategoryBadge icon={icon || '?'} color={color} />
+          <CategoryBadge icon={icon} color={color} />
           <div className="flex-1">
             <Field label="Name" error={errors.name}>
               <TextInput value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
             </Field>
           </div>
-          <div className="w-20">
-            <Field label="Icon" error={errors.icon}>
-              <TextInput
-                value={icon}
-                onChange={(e) => setIcon(e.target.value)}
-                className="text-center"
-                aria-label="Emoji icon"
-              />
-            </Field>
-          </div>
         </div>
+
+        <Field label="Icon" error={errors.icon} group>
+          <div className="grid grid-cols-7 gap-1.5 sm:grid-cols-9">
+            {(Object.keys(CATEGORY_ICONS) as CategoryIconKey[]).map((key) => {
+              const Glyph = CATEGORY_ICONS[key]
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-label={key}
+                  aria-pressed={key === icon}
+                  onClick={() => setIcon(key)}
+                  className={cx(
+                    'flex h-10 items-center justify-center rounded-lg border',
+                    key === icon
+                      ? 'border-accent bg-accent/10'
+                      : 'border-border bg-surface hover:bg-surface-2',
+                  )}
+                >
+                  <Glyph size={20} strokeWidth={1.8} color="var(--icon)" aria-hidden="true" />
+                </button>
+              )
+            })}
+          </div>
+        </Field>
 
         <Field label="Colour" group>
           <div className="flex flex-wrap gap-2.5">

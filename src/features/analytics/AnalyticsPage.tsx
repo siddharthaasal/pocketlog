@@ -200,7 +200,7 @@ export function AnalyticsPage() {
                     <div key={c.categoryId} className="flex items-center gap-3 px-4 py-3">
                       <span className="w-4 text-[13px] text-muted tabular-nums">{i + 1}</span>
                       <CategoryBadge
-                        icon={category?.icon ?? '❔'}
+                        icon={category?.icon ?? 'help'}
                         color={category?.color ?? '#868e96'}
                       />
                       <span className="min-w-0 flex-1 truncate text-[15px]">
@@ -283,7 +283,7 @@ function CategoryComparisonRow({
   const diff = current - previous
   return (
     <div className="flex items-center gap-3 px-4 py-3">
-      <CategoryBadge icon={category?.icon ?? '❔'} color={category?.color ?? '#868e96'} />
+      <CategoryBadge icon={category?.icon ?? 'help'} color={category?.color ?? '#868e96'} />
       <div className="min-w-0 flex-1">
         <div className="truncate text-[15px]">{category?.name ?? 'Uncategorised'}</div>
         <div className="text-[13px] text-muted tabular-nums">
