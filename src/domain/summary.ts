@@ -8,7 +8,7 @@ export interface CategoryTotal {
 export interface PeriodSummary {
   income: number
   expense: number
-  /** income − expense; transfers are excluded. */
+  /** income − expense; transfers are excluded. A refund counts against spending, not as income. */
   net: number
   expenseByCategory: CategoryTotal[]
 }
@@ -21,7 +21,13 @@ export function summarize(transactions: readonly Transaction[]): PeriodSummary {
 
   for (const t of transactions) {
     if (t.deletedAt) continue
-    if (t.type === 'income') {
+    if (t.type === 'income' && t.refundOf) {
+      // A refund or reimbursement: money back for an expense, so it reduces spending in the
+      // expense's category (the entry carries that category) and is not income.
+      expense -= t.amount
+      const key = t.categoryId ?? 'uncategorised'
+      byCategory.set(key, (byCategory.get(key) ?? 0) - t.amount)
+    } else if (t.type === 'income') {
       income += t.amount
     } else if (t.type === 'expense') {
       expense += t.amount

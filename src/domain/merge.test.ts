@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeAccount, makeTransaction } from '../test/factories'
-import type { BackupData } from './backup'
+import { emptyBackupData, type BackupData } from './backup'
 import { extraDefaults } from './accounts'
 import { mergeTable, planMerge } from './merge'
 
@@ -46,7 +46,7 @@ describe('mergeTable', () => {
 })
 
 describe('planMerge', () => {
-  const empty: BackupData = { transactions: [], categories: [], accounts: [], inbox: [] }
+  const empty: BackupData = emptyBackupData()
   const hdfc = makeAccount({ id: 'acc-hdfc' })
 
   it('rejects transactions that point at missing accounts or categories', () => {

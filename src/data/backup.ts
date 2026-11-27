@@ -9,13 +9,34 @@ export const LAST_BACKUP_KEY = 'lastBackupAt'
 
 /** Everything, including deleted rows, so deletions reach the other device. */
 export async function collectData(): Promise<BackupData> {
-  const [transactions, categories, accounts, inbox] = await Promise.all([
-    db.transactions.toArray(),
-    db.categories.toArray(),
-    db.accounts.toArray(),
-    db.inbox.toArray(),
-  ])
-  return { transactions, categories, accounts, inbox }
+  const [
+    transactions,
+    categories,
+    accounts,
+    inbox,
+    holdings,
+    valuations,
+    loans,
+    loanBalances,
+    subscriptions,
+    policies,
+    accountBalances,
+    snapshots,
+  ] = await Promise.all(TABLES().map((table) => table.toArray()))
+  return {
+    transactions,
+    categories,
+    accounts,
+    inbox,
+    holdings,
+    valuations,
+    loans,
+    loanBalances,
+    subscriptions,
+    policies,
+    accountBalances,
+    snapshots,
+  } as BackupData
 }
 
 export async function exportBackupText(passphrase?: string): Promise<string> {
@@ -36,7 +57,45 @@ export async function recordBackup(at = nowISO()): Promise<void> {
   await db.meta.put({ key: LAST_BACKUP_KEY, value: at })
 }
 
-const ALL_TABLES = () => [db.transactions, db.categories, db.accounts, db.inbox]
+/** In the same order as the fields of `BackupData`. */
+const TABLES = () =>
+  [
+    db.transactions,
+    db.categories,
+    db.accounts,
+    db.inbox,
+    db.holdings,
+    db.valuations,
+    db.loans,
+    db.loanBalances,
+    db.subscriptions,
+    db.policies,
+    db.accountBalances,
+    db.snapshots,
+  ] as const
+
+const ALL_TABLES = TABLES
+
+async function writeAll(data: BackupData): Promise<void> {
+  const rows = TABLES()
+  const values = [
+    data.transactions,
+    data.categories,
+    data.accounts,
+    data.inbox,
+    data.holdings,
+    data.valuations,
+    data.loans,
+    data.loanBalances,
+    data.subscriptions,
+    data.policies,
+    data.accountBalances,
+    data.snapshots,
+  ]
+  for (const [i, table] of rows.entries()) {
+    await (table as { bulkPut(rows: unknown[]): Promise<unknown> }).bulkPut(values[i] ?? [])
+  }
+}
 
 async function clearExtraDefaults(): Promise<void> {
   const now = nowISO()
@@ -57,10 +116,7 @@ export async function previewMerge(incoming: BackupData): Promise<MergePlan> {
 export async function applyMerge(incoming: BackupData): Promise<MergePlan> {
   return db.transaction('rw', ALL_TABLES(), async () => {
     const plan = planMerge(await collectData(), incoming)
-    await db.transactions.bulkPut(plan.writes.transactions)
-    await db.categories.bulkPut(plan.writes.categories)
-    await db.accounts.bulkPut(plan.writes.accounts)
-    await db.inbox.bulkPut(plan.writes.inbox)
+    await writeAll(plan.writes)
     await clearExtraDefaults()
     return plan
   })
@@ -73,10 +129,7 @@ export async function replaceAll(incoming: BackupData): Promise<void> {
   }
   await db.transaction('rw', ALL_TABLES(), async () => {
     await Promise.all(ALL_TABLES().map((table) => table.clear()))
-    await db.transactions.bulkPut(incoming.transactions)
-    await db.categories.bulkPut(incoming.categories)
-    await db.accounts.bulkPut(incoming.accounts)
-    await db.inbox.bulkPut(incoming.inbox)
+    await writeAll(incoming)
     await clearExtraDefaults()
   })
 }

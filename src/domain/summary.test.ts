@@ -36,3 +36,15 @@ describe('summarize', () => {
     ])
   })
 })
+
+describe('refunds', () => {
+  it('reduce spending in the refunded category and are not income', () => {
+    const s = summarize([
+      tx({ amount: 50000, categoryId: 'cat-shopping' }),
+      tx({ type: 'income', amount: 20000, categoryId: 'cat-shopping', refundOf: 'earlier' }),
+      tx({ type: 'income', amount: 100000, categoryId: 'cat-salary' }),
+    ])
+    expect(s).toMatchObject({ income: 100000, expense: 30000, net: 70000 })
+    expect(s.expenseByCategory).toEqual([{ categoryId: 'cat-shopping', amount: 30000 }])
+  })
+})

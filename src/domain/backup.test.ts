@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { makeAccount, makeTransaction } from '../test/factories'
-import { createBackup, readBackupText, serializeBackup, type BackupData } from './backup'
+import {
+  createBackup,
+  emptyBackupData,
+  readBackupText,
+  serializeBackup,
+  type BackupData,
+} from './backup'
 import { transactionsToCsv } from './csv'
 
 const data: BackupData = {
+  ...emptyBackupData(),
   transactions: [makeTransaction({ id: 't1', description: 'Lunch', accountId: 'acc-hdfc' })],
   categories: [],
   accounts: [makeAccount({ id: 'acc-hdfc', name: 'HDFC Bank' })],
-  inbox: [],
 }
 const backup = createBackup(data, '2026-11-03T10:00:00.000Z')
 

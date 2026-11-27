@@ -1,7 +1,20 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo } from 'react'
 import { accountBalances } from '../domain/balances'
-import type { Account, Category, InboxEntry, Transaction } from '../domain/types'
+import type {
+  Account,
+  AccountBalance,
+  Category,
+  Holding,
+  InboxEntry,
+  Loan,
+  LoanBalance,
+  NetWorthSnapshot,
+  Policy,
+  Subscription,
+  Transaction,
+  Valuation,
+} from '../domain/types'
 import { monthBounds } from '../lib/dates'
 import { db } from './db'
 
@@ -93,5 +106,46 @@ export function useMeta<T>(key: string): { value: T | undefined } | undefined {
   return useLiveQuery(
     async () => ({ value: (await db.meta.get(key))?.value as T | undefined }),
     [key],
+  )
+}
+
+// ---------- Finance tracker ----------
+
+const alive = <T extends { deletedAt?: string | undefined }>(rows: T[]) =>
+  rows.filter((r) => !r.deletedAt)
+
+export function useHoldings(): Holding[] | undefined {
+  return useLiveQuery(async () => alive(await db.holdings.toArray()).sort(byName))
+}
+
+export function useValuations(): Valuation[] | undefined {
+  return useLiveQuery(async () => alive(await db.valuations.toArray()))
+}
+
+export function useLoans(): Loan[] | undefined {
+  return useLiveQuery(async () => alive(await db.loans.toArray()).sort(byName))
+}
+
+export function useLoanBalances(): LoanBalance[] | undefined {
+  return useLiveQuery(async () => alive(await db.loanBalances.toArray()))
+}
+
+export function useSubscriptions(): Subscription[] | undefined {
+  return useLiveQuery(async () =>
+    alive(await db.subscriptions.toArray()).sort((a, b) => a.service.localeCompare(b.service)),
+  )
+}
+
+export function usePolicies(): Policy[] | undefined {
+  return useLiveQuery(async () => alive(await db.policies.toArray()).sort(byName))
+}
+
+export function useAccountBalances(): AccountBalance[] | undefined {
+  return useLiveQuery(async () => alive(await db.accountBalances.toArray()))
+}
+
+export function useSnapshots(): NetWorthSnapshot[] | undefined {
+  return useLiveQuery(async () =>
+    alive(await db.snapshots.toArray()).sort((a, b) => a.month.localeCompare(b.month)),
   )
 }

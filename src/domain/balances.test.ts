@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeAccount, makeTransaction, makeTransfer } from '../test/factories'
-import { accountBalances, totalBalance } from './balances'
+import { accountBalances, balanceOn, findDrift, totalBalance } from './balances'
 import { summarize } from './summary'
 
 const hdfc = makeAccount({ id: 'hdfc', openingBalance: 50_000_00 })
@@ -58,5 +58,50 @@ describe('accountBalances', () => {
     ])
     expect(b.get('hdfc')).toBe(50_000_00)
     expect(b.has('ghost')).toBe(false)
+  })
+})
+
+describe('balance checkpoints', () => {
+  const checkpoint = (balance: number, date = '2026-11-10') => ({
+    id: 'ab1',
+    accountId: 'hdfc',
+    date,
+    balance,
+    source: 'reconcile' as const,
+    createdAt: '2026-11-10T00:00:00.000Z',
+    updatedAt: '2026-11-10T00:00:00.000Z',
+  })
+  const txs = [
+    makeTransaction({ accountId: 'hdfc', amount: 1_000_00, date: '2026-11-05' }),
+    makeTransaction({ accountId: 'hdfc', amount: 500_00, date: '2026-11-20' }),
+  ]
+
+  it('works out the balance on a date, ignoring later entries', () => {
+    expect(balanceOn(hdfc, txs, '2026-11-10')).toBe(49_000_00)
+  })
+
+  it('reports nothing when the statement agrees', () => {
+    expect(findDrift([hdfc], txs, [checkpoint(49_000_00)])).toEqual([])
+  })
+
+  it('reports how far PocketLog is from the statement', () => {
+    expect(findDrift([hdfc], txs, [checkpoint(48_500_00)])).toEqual([
+      {
+        accountId: 'hdfc',
+        date: '2026-11-10',
+        statement: 48_500_00,
+        computed: 49_000_00,
+        difference: 500_00,
+      },
+    ])
+  })
+
+  it('compares only the latest checkpoint and skips deleted ones', () => {
+    const drift = findDrift([hdfc], txs, [
+      checkpoint(1, '2026-11-01'),
+      { ...checkpoint(2, '2026-11-12'), deletedAt: '2026-11-13T00:00:00.000Z' },
+      checkpoint(49_000_00, '2026-11-10'),
+    ])
+    expect(drift).toEqual([])
   })
 })

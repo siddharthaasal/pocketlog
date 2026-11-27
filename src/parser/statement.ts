@@ -8,6 +8,8 @@ export interface ParsedStatement {
   /** Date range the rows cover (inclusive), for spotting entries missing from the statement. */
   from: string
   to: string
+  /** The balance the statement printed after its last transaction, when it has a balance column. */
+  closing?: { date: string; balance: number }
 }
 
 export type StatementResult =
@@ -70,6 +72,17 @@ export function parseAmountPaise(value: Cell): number {
   if (value == null || value === '') return 0
   const n = typeof value === 'number' ? value : Number(String(value).replace(/[₹,\s]|Rs\.?/gi, ''))
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0
+}
+
+/** A running balance: signed, and "Dr" marks money owed. Null when blank or unreadable. */
+export function parseBalancePaise(value: Cell): number | null {
+  if (value == null || value === '') return null
+  if (typeof value === 'number') return Number.isFinite(value) ? Math.round(value * 100) : null
+  const raw = value.replace(/[₹,\s]|Rs\.?/gi, '')
+  const owed = /dr$/i.test(raw)
+  const n = Number(raw.replace(/(cr|dr)$/i, ''))
+  if (!Number.isFinite(n) || raw === '') return null
+  return Math.round(n * 100) * (owed ? -1 : 1)
 }
 
 /** Small, fast, deterministic string hash (cyrb53). Not for security. */
@@ -148,6 +161,7 @@ export function parseStatementGrid(grid: readonly (readonly Cell[])[]): Statemen
   const { cols } = header
   const rows: StatementRow[] = []
   const seen = new Map<string, number>()
+  const balances: (number | null)[] = []
 
   for (const cells of grid.slice(header.row + 1)) {
     const date = parseStatementDate(cells[cols.date])
@@ -159,6 +173,7 @@ export function parseStatementGrid(grid: readonly (readonly Cell[])[]): Statemen
     const amount = out || into
     const narration = text(cells[cols.narration]).replace(/\s+/g, ' ')
     const balance = cols.balance >= 0 ? text(cells[cols.balance]) : ''
+    balances.push(cols.balance >= 0 ? parseBalancePaise(cells[cols.balance]) : null)
     const ref = cols.ref >= 0 ? text(cells[cols.ref]) : ''
     // Identical rows (same day, amount, payee) are told apart by the running balance, or
     // failing that by how many came before.
@@ -176,8 +191,20 @@ export function parseStatementGrid(grid: readonly (readonly Cell[])[]): Statemen
 
   if (rows.length === 0) return { ok: false, message: 'No transactions were found in this file.' }
   const dates = rows.map((r) => r.date).sort()
+  // Statements list oldest first or newest first; the closing balance is on the latest row.
+  const ascending = rows[0]!.date <= rows[rows.length - 1]!.date
+  const closingAt = ascending ? rows.length - 1 : 0
+  const closingBalance = balances[closingAt] ?? null
   return {
     ok: true,
-    statement: { bank: detectBank(grid), rows, from: dates[0]!, to: dates[dates.length - 1]! },
+    statement: {
+      bank: detectBank(grid),
+      rows,
+      from: dates[0]!,
+      to: dates[dates.length - 1]!,
+      ...(closingBalance !== null && {
+        closing: { date: rows[closingAt]!.date, balance: closingBalance },
+      }),
+    },
   }
 }

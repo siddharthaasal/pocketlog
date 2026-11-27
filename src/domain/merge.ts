@@ -1,4 +1,4 @@
-import type { BackupData, InvalidRow } from './backup'
+import { VERSIONED_TABLES, emptyBackupData, type BackupData, type InvalidRow } from './backup'
 import type { InboxEntry } from './types'
 
 interface Versioned {
@@ -66,7 +66,7 @@ function mergeInbox(local: readonly InboxEntry[], incoming: readonly InboxEntry[
 
 export interface MergePlan {
   writes: BackupData
-  counts: Record<'transactions' | 'categories' | 'accounts', MergeCounts>
+  counts: Record<(typeof VERSIONED_TABLES)[number], MergeCounts>
   /** Rows that can't be merged because something they point to is missing. */
   invalid: InvalidRow[]
 }
@@ -92,20 +92,15 @@ export function planMerge(local: BackupData, incoming: BackupData): MergePlan {
     return true
   })
 
-  const tx = mergeTable(local.transactions, transactions)
-  const categories = mergeTable(local.categories, incoming.categories)
-  const accounts = mergeTable(local.accounts, incoming.accounts)
-
-  return {
-    writes: {
-      transactions: tx.writes,
-      categories: categories.writes,
-      accounts: accounts.writes,
-      inbox: mergeInbox(local.inbox, incoming.inbox),
-    },
-    counts: { transactions: tx.counts, categories: categories.counts, accounts: accounts.counts },
-    invalid,
+  const writes = { ...emptyBackupData(), inbox: mergeInbox(local.inbox, incoming.inbox) }
+  const counts = {} as MergePlan['counts']
+  for (const table of VERSIONED_TABLES) {
+    const rows = table === 'transactions' ? transactions : incoming[table]
+    const merged = mergeTable<Versioned>(local[table], rows)
+    ;(writes[table] as Versioned[]) = merged.writes
+    counts[table] = merged.counts
   }
+  return { writes, counts, invalid }
 }
 
 export function hasChanges(plan: MergePlan): boolean {
