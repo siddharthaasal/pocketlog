@@ -212,7 +212,8 @@ export function WealthSummary() {
             ))}
             {view.drift > 0 && (
               <Link href="/settings/accounts" className="block text-[14px] text-negative">
-                {view.drift} account{view.drift === 1 ? '' : 's'} differ from the bank statement
+                {view.drift === 1 ? '1 account differs' : `${view.drift} accounts differ`} from the
+                bank statement
               </Link>
             )}
           </div>

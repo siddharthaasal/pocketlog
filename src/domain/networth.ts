@@ -119,7 +119,7 @@ export interface Sources {
 
 export interface Computed {
   lines: Lines
-  /** Total put into holdings by that month, from valuations (before-tracking amount not included). */
+  /** Put into investment holdings by that month, from valuations (property and other assets excluded). */
   invested: number
   /** Holdings with no value entered for exactly this month (carried forward or missing). */
   staleHoldings: Holding[]
@@ -151,8 +151,11 @@ export function computeLines(month: string, s: Sources): Computed {
     // A sold or closed holding only counts in months it actually has a value.
     if (!v || (h.archived && !exact)) continue
     if (!exact) staleHoldings.push(h)
-    lines[bucketOfKind(h.kind)] += v.value
-    invested += v.invested
+    const bucket = bucketOfKind(h.kind)
+    lines[bucket] += v.value
+    // Growth compares investments with what went into them, so property and other assets
+    // (which aren't counted as investments) must not count towards what was put in.
+    if (INVESTMENT_BUCKETS.includes(bucket)) invested += v.invested
   }
 
   const staleLoans: Loan[] = []
