@@ -29,11 +29,16 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="md:flex">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col gap-1 border-r border-border px-3 py-6 md:flex">
-        <div className="mb-6 px-3 text-[17px] font-semibold tracking-tight">PocketLog</div>
+      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col gap-0.5 border-r border-border px-2.5 py-5 md:flex">
+        <div className="mb-5 flex items-center gap-2 px-2.5 text-[15px] font-semibold tracking-tight">
+          <span className="flex h-5 w-5 items-center justify-center rounded bg-text text-[11px] text-bg">
+            P
+          </span>
+          PocketLog
+        </div>
         <Link
           href="/add"
-          className="mb-4 flex h-10 items-center justify-center gap-2 rounded-xl bg-accent text-[15px] font-medium text-accent-fg hover:opacity-90"
+          className="mb-3 flex h-9 items-center justify-center gap-2 rounded-lg bg-accent text-[14px] font-medium text-accent-fg hover:opacity-90"
         >
           <PlusIcon width={18} height={18} /> Add transaction
         </Link>
@@ -42,10 +47,10 @@ export function Layout({ children }: { children: ReactNode }) {
             key={href}
             href={href}
             className={cx(
-              'flex h-10 items-center gap-3 rounded-lg px-3 text-[15px]',
+              'flex h-9 items-center gap-2.5 rounded-md px-2.5 text-[14.5px]',
               isActive(location, href)
                 ? 'bg-surface-2 font-medium text-text'
-                : 'text-muted hover:text-text',
+                : 'text-muted hover:bg-surface-2/60 hover:text-text',
             )}
           >
             <NavIcon width={18} height={18} /> {label}
@@ -56,7 +61,11 @@ export function Layout({ children }: { children: ReactNode }) {
       <main
         className={cx(
           'mx-auto w-full min-w-0 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] md:pt-8 md:pb-12',
-          location.startsWith('/reconcile') ? 'max-w-6xl md:px-5' : 'max-w-3xl md:px-8',
+          location.startsWith('/reconcile')
+            ? 'max-w-6xl md:px-5'
+            : location === '/transactions'
+              ? 'max-w-5xl md:px-6'
+              : 'max-w-3xl md:px-8',
         )}
       >
         {children}
@@ -72,7 +81,7 @@ export function Layout({ children }: { children: ReactNode }) {
           aria-label="Add transaction"
           className="flex flex-1 items-center justify-center py-1.5"
         >
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-accent-fg">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-fg">
             <PlusIcon />
           </span>
         </Link>

@@ -327,7 +327,7 @@ function TransactionForm({
             placeholder="0"
             value={form.amount}
             onChange={(e) => set('amount', e.target.value)}
-            className="block h-16 w-full rounded-2xl border border-border bg-surface pr-4 pl-11 text-[32px] font-semibold tabular-nums outline-none placeholder:text-muted/60 focus:border-accent"
+            className="block h-16 w-full rounded-xl border border-border bg-surface pr-4 pl-11 text-[32px] font-semibold tabular-nums outline-none placeholder:text-muted/60 focus:border-accent"
           />
         </div>
       </Field>
@@ -342,10 +342,10 @@ function TransactionForm({
                 onClick={() => set('categoryId', c.id)}
                 aria-pressed={form.categoryId === c.id}
                 className={cx(
-                  'flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-center text-[12px] leading-tight',
+                  'flex min-h-16 flex-col items-center justify-center gap-1 rounded-lg border px-1 py-2 text-center text-[12px] leading-tight',
                   form.categoryId === c.id
                     ? 'border-accent bg-accent/10 text-text'
-                    : 'border-transparent bg-surface text-muted',
+                    : 'border-border bg-surface text-muted hover:bg-surface-2',
                 )}
               >
                 <span className="text-[20px]" aria-hidden="true">

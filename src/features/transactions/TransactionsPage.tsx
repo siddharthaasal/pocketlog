@@ -14,6 +14,7 @@ import { TRANSACTION_TYPES, type Transaction, type TransactionType } from '../..
 import { cx } from '../../lib/cx'
 import { currentMonth, formatDayHeading, monthBounds, shiftMonth, todayISO } from '../../lib/dates'
 import { TransactionRow } from './TransactionRow'
+import { TransactionsTable } from './TransactionsTable'
 
 const PERIODS = {
   all: 'All time',
@@ -292,28 +293,37 @@ export function TransactionsPage() {
             Clear filters
           </button>
         </EmptyState>
-      ) : byDate ? (
-        <div className="space-y-5">
-          {groupByDay(results).map((g) => (
-            <section key={g.date}>
-              <div className="mb-2 flex items-baseline justify-between px-1 text-[13px] font-medium text-muted">
-                <h2>{formatDayHeading(g.date)}</h2>
-                {g.spent > 0 && <Money paise={g.spent} />}
+      ) : (
+        <>
+          <div className="hidden md:block">
+            <TransactionsTable transactions={results} lookups={lookups} />
+          </div>
+          <div className="md:hidden">
+            {byDate ? (
+              <div className="space-y-5">
+                {groupByDay(results).map((g) => (
+                  <section key={g.date}>
+                    <div className="mb-2 flex items-baseline justify-between px-1 text-[13px] font-medium text-muted">
+                      <h2>{formatDayHeading(g.date)}</h2>
+                      {g.spent > 0 && <Money paise={g.spent} />}
+                    </div>
+                    <Card className="divide-y divide-border overflow-hidden">
+                      {g.items.map((t) => (
+                        <TransactionRow key={t.id} t={t} lookups={lookups} />
+                      ))}
+                    </Card>
+                  </section>
+                ))}
               </div>
+            ) : (
               <Card className="divide-y divide-border overflow-hidden">
-                {g.items.map((t) => (
-                  <TransactionRow key={t.id} t={t} lookups={lookups} />
+                {results.map((t) => (
+                  <TransactionRow key={t.id} t={t} lookups={lookups} showDate />
                 ))}
               </Card>
-            </section>
-          ))}
-        </div>
-      ) : (
-        <Card className="divide-y divide-border overflow-hidden">
-          {results.map((t) => (
-            <TransactionRow key={t.id} t={t} lookups={lookups} showDate />
-          ))}
-        </Card>
+            )}
+          </div>
+        </>
       )}
     </>
   )
@@ -329,7 +339,7 @@ function Chip({
     <select
       className={cx(
         // 16px text: iOS zooms into smaller form controls.
-        'h-9 shrink-0 appearance-none rounded-full border px-3.5 text-[16px] outline-none focus-visible:border-accent',
+        'h-9 shrink-0 appearance-none rounded-md border px-3 text-[16px] outline-none focus-visible:border-accent',
         active
           ? 'border-accent bg-accent/10 font-medium text-text'
           : 'border-border bg-surface text-text',

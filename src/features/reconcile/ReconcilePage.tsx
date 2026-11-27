@@ -8,7 +8,7 @@ import { newId } from '../../lib/ids'
 import { ConflictsList, ExtraList, IgnoredList, MatchedList } from './sections'
 import { MissingList } from './MissingList'
 import { buildPlan, guessAccount, type LoadedStatement } from './plan'
-import { ViewTabs } from './table'
+import { ViewTabs } from '../../components/table'
 
 type Tab = 'missing' | 'conflicts' | 'matched' | 'extra'
 

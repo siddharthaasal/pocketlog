@@ -2,3 +2,6 @@ dist
 dev-dist
 pnpm-lock.yaml
 plan.md
+
+# Generated design reference (npx getdesign add notion); kept as published.
+DESIGN.md

@@ -14,7 +14,7 @@ type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 
 const buttonVariants: Record<ButtonVariant, string> = {
   primary: 'bg-accent text-accent-fg hover:opacity-90',
-  secondary: 'bg-surface-2 text-text hover:opacity-80',
+  secondary: 'border border-border bg-surface text-text hover:bg-surface-2',
   ghost: 'text-accent hover:bg-surface-2',
   danger: 'text-negative hover:bg-surface-2',
 }
@@ -29,7 +29,7 @@ export function Button({
     <button
       type={type}
       className={cx(
-        'inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-[15px] font-medium transition-opacity disabled:opacity-40',
+        'inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-[14.5px] font-medium transition-colors disabled:opacity-40',
         buttonVariants[variant],
         className,
       )}
@@ -39,13 +39,15 @@ export function Button({
 }
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cx('rounded-2xl bg-surface', className)}>{children}</div>
+  return (
+    <div className={cx('rounded-xl border border-border bg-surface', className)}>{children}</div>
+  )
 }
 
 export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
     <div className="mb-2 flex items-baseline justify-between px-1">
-      <h2 className="text-[13px] font-medium uppercase tracking-wide text-muted">{children}</h2>
+      <h2 className="text-[13px] font-medium text-muted">{children}</h2>
       {action}
     </div>
   )
@@ -65,13 +67,13 @@ export function PageHeader({
       {back && (
         <Link
           href={back}
-          className="-ml-2 flex h-11 w-11 items-center justify-center rounded-full text-accent hover:bg-surface-2"
+          className="-ml-2 flex h-10 w-10 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-text"
           aria-label="Back"
         >
           <ChevronLeftIcon />
         </Link>
       )}
-      <h1 className="flex-1 text-[28px] font-semibold tracking-tight">{title}</h1>
+      <h1 className="flex-1 text-[30px] leading-tight font-bold tracking-[-0.03em]">{title}</h1>
       {action}
     </header>
   )
@@ -109,10 +111,10 @@ export function Field({
 }
 
 const inputClass =
-  'block w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-text outline-none placeholder:text-muted focus:border-accent'
+  'block w-full rounded-md border border-border bg-surface px-3 py-2 text-text outline-none placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/20'
 
 export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cx(inputClass, 'h-11', className)} {...props} />
+  return <input className={cx(inputClass, 'h-10', className)} {...props} />
 }
 
 export function TextArea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -120,7 +122,7 @@ export function TextArea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
 }
 
 export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className={cx(inputClass, 'h-11 appearance-none', className)} {...props} />
+  return <select className={cx(inputClass, 'h-10 appearance-none', className)} {...props} />
 }
 
 export function Segmented<T extends string>({
@@ -133,7 +135,7 @@ export function Segmented<T extends string>({
   onChange: (value: T) => void
 }) {
   return (
-    <div className="flex rounded-xl bg-surface-2 p-1" role="radiogroup">
+    <div className="flex rounded-lg bg-surface-2 p-0.5" role="radiogroup">
       {options.map((o) => (
         <button
           key={o.value}
@@ -142,7 +144,7 @@ export function Segmented<T extends string>({
           aria-checked={o.value === value}
           onClick={() => onChange(o.value)}
           className={cx(
-            'h-9 flex-1 rounded-lg text-[14px] font-medium transition-colors',
+            'h-8 flex-1 rounded-md text-[14px] font-medium transition-colors',
             o.value === value ? 'bg-surface text-text shadow-sm' : 'text-muted',
           )}
         >
@@ -174,7 +176,7 @@ export function Money({
 export function CategoryBadge({ icon, color }: { icon: string; color: string }) {
   return (
     <span
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[17px]"
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[16px]"
       style={{ backgroundColor: `${color}1f` }}
       aria-hidden="true"
     >
@@ -185,7 +187,7 @@ export function CategoryBadge({ icon, color }: { icon: string; color: string }) 
 
 export function EmptyState({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl bg-surface px-6 py-10 text-center">
+    <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-surface px-6 py-10 text-center">
       <p className="text-[15px] text-muted">{title}</p>
       {children}
     </div>

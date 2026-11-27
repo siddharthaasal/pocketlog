@@ -17,7 +17,7 @@ export function BackupReminder() {
   if (days !== null && days < BACKUP_REMINDER_DAYS) return null
 
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-5 py-3.5">
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
       <p className="flex-1 text-[14px]">
         {days === null
           ? 'Your data only lives on this device. Make a backup.'

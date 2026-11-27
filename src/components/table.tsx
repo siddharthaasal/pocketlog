@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { cx } from '../../lib/cx'
+import { cx } from '../lib/cx'
 
 /*
  * A flat, Notion-style database table: no card, hairline rows, light column dividers,
@@ -54,9 +54,23 @@ export function Td({ children, className }: { children?: ReactNode; className?: 
   )
 }
 
-export const Tr = ({ children, selected = false }: { children: ReactNode; selected?: boolean }) => (
+export const Tr = ({
+  children,
+  selected = false,
+  onClick,
+}: {
+  children: ReactNode
+  selected?: boolean
+  /** Makes the whole row a button, like opening a Notion row. */
+  onClick?: () => void
+}) => (
   <tr
-    className={cx('hover:bg-surface-2/50 [&:last-child_td]:border-b-0', selected && 'bg-accent/5')}
+    onClick={onClick}
+    className={cx(
+      'hover:bg-surface-2/50 [&:last-child_td]:border-b-0',
+      selected && 'bg-accent/5',
+      onClick && 'cursor-pointer',
+    )}
   >
     {children}
   </tr>

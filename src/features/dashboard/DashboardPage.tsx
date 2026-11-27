@@ -44,7 +44,7 @@ export function DashboardPage() {
 
           <Link
             href="/inbox"
-            className="flex items-center gap-3 rounded-2xl bg-surface px-5 py-3.5 hover:bg-surface-2/60"
+            className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 hover:bg-surface-2/60"
           >
             <MicIcon width={18} height={18} className="text-accent" />
             <span className="flex-1 text-[15px]">
@@ -61,7 +61,7 @@ export function DashboardPage() {
           {balances && (
             <Link
               href="/analytics#accounts"
-              className="flex items-center justify-between rounded-2xl bg-surface px-5 py-3.5 hover:bg-surface-2/60"
+              className="flex items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 hover:bg-surface-2/60"
             >
               <span className="text-[15px] text-muted">Across all accounts</span>
               <span className="flex items-center gap-1">
