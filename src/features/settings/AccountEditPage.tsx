@@ -1,6 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import { useLocation, useParams } from 'wouter'
-import { Button, Field, Loading, PageHeader, Select, TextInput } from '../../components/ui'
+import {
+  Button,
+  Card,
+  Field,
+  Loading,
+  PageHeader,
+  Select,
+  TextArea,
+  TextInput,
+} from '../../components/ui'
 import { useAccounts } from '../../data/hooks'
 import { addAccount, updateAccount } from '../../data/repo'
 import { toFieldErrors } from '../../domain/errors'
@@ -41,6 +50,17 @@ function AccountForm({ existing }: { existing: Account | undefined }) {
   )
   const [aliases, setAliases] = useState(existing?.aliases.join(', ') ?? '')
   const [isDefault, setIsDefault] = useState(existing?.isDefault ?? false)
+  const [institution, setInstitution] = useState(existing?.institution ?? '')
+  const [holder, setHolder] = useState(existing?.holder ?? '')
+  const [last4, setLast4] = useState(existing?.last4 ?? '')
+  const [nominee, setNominee] = useState(existing?.nominee ?? '')
+  const [documentsNote, setDocumentsNote] = useState(existing?.documentsNote ?? '')
+  const [openingDate, setOpeningDate] = useState(existing?.openingDate ?? '')
+  const [creditLimit, setCreditLimit] = useState(
+    existing?.creditLimit ? paiseToInput(existing.creditLimit) : '',
+  )
+  const [statementDay, setStatementDay] = useState(String(existing?.statementDay ?? ''))
+  const [dueDay, setDueDay] = useState(String(existing?.dueDay ?? ''))
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const isCard = type === 'credit_card'
@@ -61,12 +81,27 @@ function AccountForm({ existing }: { existing: Account | undefined }) {
       setErrors({ openingBalance: 'Enter an amount, e.g. 25000' })
       return
     }
+    const limit = creditLimit.trim() ? parseRupees(creditLimit) : null
+    if (isCard && creditLimit.trim() && limit === null) {
+      setErrors({ creditLimit: 'Enter an amount, e.g. 150000' })
+      return
+    }
+    const day = (value: string) => (value.trim() ? Number(value) : undefined)
     const fields = {
       name,
       type,
       openingBalance: isCard ? -amount : amount,
       aliases: parseWordList(aliases),
       isDefault,
+      institution: institution.trim() || undefined,
+      holder: holder.trim() || undefined,
+      last4: last4.trim() || undefined,
+      nominee: nominee.trim() || undefined,
+      documentsNote: documentsNote.trim() || undefined,
+      openingDate: openingDate || undefined,
+      creditLimit: isCard ? (limit ?? undefined) : undefined,
+      statementDay: isCard ? day(statementDay) : undefined,
+      dueDay: isCard ? day(dueDay) : undefined,
     }
     void run(() => (existing ? updateAccount(existing.id, fields) : addAccount(fields)))
   }
@@ -102,12 +137,101 @@ function AccountForm({ existing }: { existing: Account | undefined }) {
         </Field>
 
         <Field
+          label="Opening balance date"
+          error={errors.openingDate}
+          hint="The day that balance was true. Leave blank if it’s before your first entry."
+        >
+          <TextInput
+            type="date"
+            value={openingDate}
+            max="9999-12-31"
+            onChange={(e) => setOpeningDate(e.target.value)}
+          />
+        </Field>
+
+        <Field
           label="Siri names"
           error={errors.aliases}
           hint="Comma-separated words you'd say for this account, e.g. hdfc, salary account."
         >
           <TextInput value={aliases} onChange={(e) => setAliases(e.target.value)} />
         </Field>
+
+        <details
+          open={Boolean(
+            existing &&
+            (existing.institution ||
+              existing.last4 ||
+              existing.nominee ||
+              existing.documentsNote ||
+              existing.creditLimit),
+          )}
+          className="group"
+        >
+          <summary className="cursor-pointer list-none px-1 text-[15px] text-accent">
+            <span className="group-open:hidden">More details</span>
+            <span className="hidden group-open:inline">Fewer details</span>
+          </summary>
+          <Card className="mt-3 space-y-4 bg-transparent p-4">
+            <p className="text-[13px] text-muted">
+              Only what you’d want to find later. Never store passwords, PINs or full account
+              numbers here.
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Bank or institution" error={errors.institution}>
+                <TextInput value={institution} onChange={(e) => setInstitution(e.target.value)} />
+              </Field>
+              <Field label="Account holder" error={errors.holder}>
+                <TextInput value={holder} onChange={(e) => setHolder(e.target.value)} />
+              </Field>
+              <Field label="Last 4 digits" error={errors.last4}>
+                <TextInput
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={last4}
+                  onChange={(e) => setLast4(e.target.value.replace(/\D/g, ''))}
+                />
+              </Field>
+              <Field label="Nominee" error={errors.nominee}>
+                <TextInput value={nominee} onChange={(e) => setNominee(e.target.value)} />
+              </Field>
+            </div>
+            {isCard && (
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Credit limit" error={errors.creditLimit}>
+                  <TextInput
+                    inputMode="decimal"
+                    value={creditLimit}
+                    onChange={(e) => setCreditLimit(e.target.value)}
+                  />
+                </Field>
+                <Field label="Statement day" error={errors.statementDay}>
+                  <TextInput
+                    inputMode="numeric"
+                    maxLength={2}
+                    value={statementDay}
+                    onChange={(e) => setStatementDay(e.target.value.replace(/\D/g, ''))}
+                  />
+                </Field>
+                <Field label="Due day" error={errors.dueDay}>
+                  <TextInput
+                    inputMode="numeric"
+                    maxLength={2}
+                    value={dueDay}
+                    onChange={(e) => setDueDay(e.target.value.replace(/\D/g, ''))}
+                  />
+                </Field>
+              </div>
+            )}
+            <Field label="Where the documents are" error={errors.documentsNote}>
+              <TextArea
+                value={documentsNote}
+                onChange={(e) => setDocumentsNote(e.target.value)}
+                placeholder="Optional"
+              />
+            </Field>
+          </Card>
+        </details>
 
         {!existing?.archived && (
           <label className="flex items-center justify-between rounded-xl bg-surface px-4 py-3">

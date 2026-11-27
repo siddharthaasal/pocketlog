@@ -12,7 +12,15 @@ import {
   TextInput,
 } from '../../components/ui'
 import { cx } from '../../lib/cx'
-import { useAccounts, useCategories, useTransaction } from '../../data/hooks'
+import {
+  useAccounts,
+  useAllTransactions,
+  useCategories,
+  useHoldings,
+  useLoans,
+  useSubscriptions,
+  useTransaction,
+} from '../../data/hooks'
 import {
   addTransaction,
   deleteTransaction,
@@ -20,7 +28,7 @@ import {
   updateTransaction,
 } from '../../data/repo'
 import { toFieldErrors } from '../../domain/errors'
-import { paiseToInput, parseRupees } from '../../domain/money'
+import { formatINR, paiseToInput, parseRupees } from '../../domain/money'
 import {
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
@@ -31,7 +39,7 @@ import {
   type TransactionInput,
   type TransactionType,
 } from '../../domain/types'
-import { todayISO } from '../../lib/dates'
+import { formatShortDate, todayISO } from '../../lib/dates'
 import { goBack } from '../../lib/navigation'
 import { resolveInboxEntry } from '../../data/inbox'
 import { MicIcon } from '../../components/icons'
@@ -72,6 +80,11 @@ interface FormState {
   merchant: string
   paymentMethod: PaymentMethod | ''
   notes: string
+  /** Optional links to the finance tracker; empty string means none. */
+  refundOf: string
+  loanId: string
+  subscriptionId: string
+  holdingId: string
 }
 
 /** Handles both /add and /transactions/:id. */
@@ -113,6 +126,10 @@ export function TransactionFormPage() {
         merchant: existing.merchant ?? '',
         paymentMethod: existing.paymentMethod ?? '',
         notes: existing.notes ?? '',
+        refundOf: existing.refundOf ?? '',
+        loanId: existing.loanId ?? '',
+        subscriptionId: existing.subscriptionId ?? '',
+        holdingId: existing.holdingId ?? '',
       }
     : prefill
       ? applyParse(
@@ -176,6 +193,10 @@ function newFormState(type: TransactionType, accounts: readonly Account[]): Form
     merchant: '',
     paymentMethod: '',
     notes: '',
+    refundOf: '',
+    loanId: '',
+    subscriptionId: '',
+    holdingId: '',
   }
 }
 
@@ -225,7 +246,16 @@ function TransactionForm({
     setForm((f) => ({
       ...f,
       type,
-      categoryId: categories.find((c) => c.id === f.categoryId)?.type === type ? f.categoryId : '',
+      refundOf: type === 'income' ? f.refundOf : '',
+      loanId: type === 'income' ? '' : f.loanId,
+      subscriptionId: type === 'expense' ? f.subscriptionId : '',
+      holdingId: type === 'transfer' ? f.holdingId : '',
+      categoryId:
+        type !== 'income' || !f.refundOf
+          ? categories.find((c) => c.id === f.categoryId)?.type === type
+            ? f.categoryId
+            : ''
+          : f.categoryId,
       toAccountId:
         type === 'transfer' && (!f.toAccountId || f.toAccountId === f.accountId)
           ? pickTransferTarget(accounts, f.accountId)
@@ -252,6 +282,10 @@ function TransactionForm({
       merchant: form.merchant.trim() || undefined,
       paymentMethod: isTransfer ? undefined : form.paymentMethod || undefined,
       notes: form.notes.trim() || undefined,
+      refundOf: form.type === 'income' ? form.refundOf || undefined : undefined,
+      loanId: form.loanId || undefined,
+      subscriptionId: form.subscriptionId || undefined,
+      holdingId: form.holdingId || undefined,
     }
     setSaving(true)
     try {
@@ -273,7 +307,14 @@ function TransactionForm({
     goBack(navigate, '/transactions')
   }
 
-  const hasDetails = Boolean(initial.merchant || initial.paymentMethod || initial.notes)
+  const hasDetails = Boolean(
+    initial.merchant ||
+    initial.paymentMethod ||
+    initial.notes ||
+    initial.loanId ||
+    initial.subscriptionId ||
+    initial.holdingId,
+  )
 
   return (
     <form onSubmit={onSubmit} className="space-y-5" noValidate>
@@ -332,7 +373,28 @@ function TransactionForm({
         </div>
       </Field>
 
-      {!isTransfer && (
+      {form.type === 'income' && (
+        <RefundPicker
+          value={form.refundOf}
+          selfId={existing?.id}
+          categories={categories}
+          error={errors.refundOf}
+          onChange={(original) =>
+            setForm((f) => ({
+              ...f,
+              refundOf: original?.id ?? '',
+              // The refund counts against the expense's category.
+              categoryId: original
+                ? (original.categoryId ?? '')
+                : categories.find((c) => c.id === f.categoryId)?.type === 'income'
+                  ? f.categoryId
+                  : '',
+            }))
+          }
+        />
+      )}
+
+      {!isTransfer && !form.refundOf && (
         <Field label="Category" error={errors.categoryId} group>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {visibleCategories.map((c) => (
@@ -405,7 +467,7 @@ function TransactionForm({
           <span className="group-open:hidden">More details</span>
           <span className="hidden group-open:inline">Fewer details</span>
         </summary>
-        <Card className="mt-3 space-y-4 bg-transparent">
+        <Card className="mt-3 space-y-4 bg-transparent p-4">
           {!isTransfer && (
             <div className="grid grid-cols-2 gap-3">
               <Field label="Merchant" error={errors.merchant}>
@@ -430,6 +492,7 @@ function TransactionForm({
               </Field>
             </div>
           )}
+          <TrackerLinks form={form} set={set} errors={errors} />
           <Field label="Notes" error={errors.notes}>
             <TextArea
               value={form.notes}
@@ -453,5 +516,115 @@ function TransactionForm({
         )}
       </div>
     </form>
+  )
+}
+
+/** Lets an income entry say which expense it pays back, so spending and savings stay accurate. */
+function RefundPicker({
+  value,
+  selfId,
+  categories,
+  error,
+  onChange,
+}: {
+  value: string
+  selfId: string | undefined
+  categories: readonly Category[]
+  error: string | undefined
+  onChange: (original: Transaction | null) => void
+}) {
+  const transactions = useAllTransactions()
+  const expenses = (transactions ?? []).filter((t) => t.type === 'expense' && t.id !== selfId)
+  // Newest first already; keep the list short enough to scan.
+  const options = expenses.slice(0, 150)
+  if (value && !options.some((t) => t.id === value)) {
+    const chosen = expenses.find((t) => t.id === value)
+    if (chosen) options.unshift(chosen)
+  }
+  const label = (t: Transaction) => {
+    const category = categories.find((c) => c.id === t.categoryId)?.name ?? ''
+    return `${formatShortDate(t.date, true)} · ${t.description || t.merchant || category} · ${formatINR(t.amount)}`
+  }
+  return (
+    <Field
+      label="Is this a refund or repayment?"
+      error={error}
+      hint="Pick the expense it pays back. It then reduces that spending and doesn’t count as income."
+    >
+      <Select
+        value={value}
+        onChange={(e) => onChange(options.find((t) => t.id === e.target.value) ?? null)}
+      >
+        <option value="">No, it’s new income</option>
+        {options.map((t) => (
+          <option key={t.id} value={t.id}>
+            {label(t)}
+          </option>
+        ))}
+      </Select>
+    </Field>
+  )
+}
+
+/** Optional links to loans, subscriptions and holdings; hidden until some exist. */
+function TrackerLinks({
+  form,
+  set,
+  errors,
+}: {
+  form: FormState
+  set: <K extends keyof FormState>(key: K, value: FormState[K]) => void
+  errors: Record<string, string>
+}) {
+  const loans = useLoans()?.filter((l) => l.active)
+  const subscriptions = useSubscriptions()?.filter((s) => s.status !== 'cancelled')
+  const holdings = useHoldings()?.filter((h) => !h.archived)
+  const showLoans = form.type !== 'income' && (loans?.length ?? 0) > 0
+  const showSubs = form.type === 'expense' && (subscriptions?.length ?? 0) > 0
+  const showHoldings = form.type === 'transfer' && (holdings?.length ?? 0) > 0
+  if (!showLoans && !showSubs && !showHoldings) return null
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {showLoans && (
+        <Field label="Loan repayment" error={errors.loanId}>
+          <Select value={form.loanId} onChange={(e) => set('loanId', e.target.value)}>
+            <option value="">—</option>
+            {loans?.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+      {showSubs && (
+        <Field label="Subscription" error={errors.subscriptionId}>
+          <Select
+            value={form.subscriptionId}
+            onChange={(e) => set('subscriptionId', e.target.value)}
+          >
+            <option value="">—</option>
+            {subscriptions?.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.service}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+      {showHoldings && (
+        <Field label="Invested in" error={errors.holdingId}>
+          <Select value={form.holdingId} onChange={(e) => set('holdingId', e.target.value)}>
+            <option value="">—</option>
+            {holdings?.map((h) => (
+              <option key={h.id} value={h.id}>
+                {h.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+    </div>
   )
 }

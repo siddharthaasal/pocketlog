@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   detectBank,
   parseAmountPaise,
+  parseBalancePaise,
   parseCsv,
   parseStatementDate,
   parseStatementGrid,
@@ -175,5 +176,30 @@ describe('parseCsv', () => {
 describe('detectBank', () => {
   it('falls back to unknown', () => {
     expect(detectBank([['Some other bank']])).toBe('unknown')
+  })
+})
+
+describe('closing balance', () => {
+  const header = 'Date,Narration,Withdrawal Amt.,Deposit Amt.,Closing Balance'
+
+  it('is taken from the last row of an oldest-first statement', () => {
+    const result = parseStatementGrid(
+      parseCsv([header, '01/11/26,A,100,,900.50', '02/11/26,B,,50,950.50'].join('\n')),
+    )
+    expect(result.ok && result.statement.closing).toEqual({ date: '2026-11-02', balance: 95050 })
+  })
+
+  it('is taken from the first row of a newest-first statement', () => {
+    const result = parseStatementGrid(
+      parseCsv([header, '02/11/26,B,,50,950.50', '01/11/26,A,100,,900.50'].join('\n')),
+    )
+    expect(result.ok && result.statement.closing).toEqual({ date: '2026-11-02', balance: 95050 })
+  })
+
+  it('reads signed and Dr/Cr balances', () => {
+    expect(parseBalancePaise('1,234.50 Cr')).toBe(123450)
+    expect(parseBalancePaise('1,234.50 Dr')).toBe(-123450)
+    expect(parseBalancePaise('-20')).toBe(-2000)
+    expect(parseBalancePaise('')).toBeNull()
   })
 })

@@ -1,7 +1,15 @@
 import { useMemo, useState, type ChangeEvent } from 'react'
 import { Button, Card, Field, Loading, PageHeader, Select } from '../../components/ui'
 import { readStatementFile } from '../../data/statementFile'
-import { useAccounts, useAllTransactions, useCategories } from '../../data/hooks'
+import {
+  useAccountBalances,
+  useAccounts,
+  useAllTransactions,
+  useCategories,
+} from '../../data/hooks'
+import { saveAccountBalance } from '../../data/records'
+import { balanceOn } from '../../domain/balances'
+import { formatINR } from '../../domain/money'
 import { linkTransactions, useIgnoredPayees } from '../../data/reconcile'
 import { formatShortDate } from '../../lib/dates'
 import { newId } from '../../lib/ids'
@@ -9,6 +17,7 @@ import { ConflictsList, ExtraList, IgnoredList, MatchedList } from './sections'
 import { MissingList } from './MissingList'
 import { buildPlan, guessAccount, type LoadedStatement } from './plan'
 import { ViewTabs } from '../../components/table'
+import type { Account, Transaction } from '../../domain/types'
 
 type Tab = 'missing' | 'conflicts' | 'matched' | 'extra'
 
@@ -17,12 +26,13 @@ export function ReconcilePage() {
   const categories = useCategories()
   const transactions = useAllTransactions()
   const ignoredPayees = useIgnoredPayees()
+  const checkpoints = useAccountBalances()
   const [files, setFiles] = useState<LoadedStatement[]>([])
   const [problems, setProblems] = useState<string[]>([])
   const [reading, setReading] = useState(false)
   const [tab, setTab] = useState<Tab>('missing')
 
-  const ready = accounts && categories && transactions && ignoredPayees
+  const ready = accounts && categories && transactions && ignoredPayees && checkpoints
   const plan = useMemo(
     () => (ready ? buildPlan(files, transactions, ignoredPayees) : null),
     [ready, files, transactions, ignoredPayees],
@@ -133,6 +143,19 @@ export function ReconcilePage() {
                     ))}
                 </Select>
               </Field>
+              {f.accountId && f.statement.closing && (
+                <BalanceCheck
+                  closing={f.statement.closing}
+                  account={accounts.find((a) => a.id === f.accountId)}
+                  transactions={transactions}
+                  saved={checkpoints.some(
+                    (c) =>
+                      c.accountId === f.accountId &&
+                      c.date === f.statement.closing?.date &&
+                      c.balance === f.statement.closing?.balance,
+                  )}
+                />
+              )}
               {!f.accountId && (
                 <p className="px-1 text-[13px] text-negative">
                   Couldn’t tell which account this is. Choose one to compare it.
@@ -195,5 +218,51 @@ export function ReconcilePage() {
         )}
       </div>
     </>
+  )
+}
+
+/** Compares the balance the statement ends with against what PocketLog works out for that day. */
+function BalanceCheck({
+  closing,
+  account,
+  transactions,
+  saved,
+}: {
+  closing: { date: string; balance: number }
+  account: Account | undefined
+  transactions: readonly Transaction[]
+  saved: boolean
+}) {
+  if (!account) return null
+  const computed = balanceOn(account, transactions, closing.date)
+  const gap = computed - closing.balance
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-surface-2 px-3 py-2 text-[13.5px]">
+      <span className="min-w-0 flex-1">
+        Statement ends at {formatINR(closing.balance)} on {formatShortDate(closing.date, true)}.{' '}
+        {gap === 0 ? (
+          'PocketLog agrees.'
+        ) : (
+          <span className="text-negative">
+            PocketLog works out {formatINR(computed)}, {formatINR(Math.abs(gap))}{' '}
+            {gap > 0 ? 'more' : 'less'}. Add the missing entries below, or check the opening
+            balance.
+          </span>
+        )}
+      </span>
+      {saved ? (
+        <span className="text-muted">Saved as a balance check</span>
+      ) : (
+        <Button
+          variant="secondary"
+          className="h-8 px-3 text-[13px]"
+          onClick={() =>
+            void saveAccountBalance(account.id, closing.date, closing.balance, 'reconcile')
+          }
+        >
+          Save balance check
+        </Button>
+      )}
+    </div>
   )
 }

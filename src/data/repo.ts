@@ -23,6 +23,16 @@ interface AddOptions {
   bankRef?: string
 }
 
+/** Only the tables this transaction needs, so statement imports can nest inside their own transaction. */
+const txTables = (t: TransactionInput) => [
+  db.transactions,
+  db.accounts,
+  db.categories,
+  ...(t.loanId ? [db.loans] : []),
+  ...(t.subscriptionId ? [db.subscriptions] : []),
+  ...(t.holdingId ? [db.holdings] : []),
+]
+
 /** Checks that referenced accounts/categories exist, are active and match the transaction type. */
 async function assertReferences(t: TransactionInput): Promise<void> {
   const errors: Record<string, string> = {}
@@ -34,8 +44,27 @@ async function assertReferences(t: TransactionInput): Promise<void> {
   }
   if (t.categoryId) {
     const category = await db.categories.get(t.categoryId)
+    // A refund carries the category of the expense it refunds, so it reduces that spending.
+    const wanted = t.refundOf ? 'expense' : t.type
     if (!category || category.deletedAt) errors.categoryId = 'Category not found'
-    else if (category.type !== t.type) errors.categoryId = `Pick an ${t.type} category`
+    else if (category.type !== wanted) errors.categoryId = `Pick an ${wanted} category`
+  }
+  if (t.refundOf) {
+    const original = await db.transactions.get(t.refundOf)
+    if (!original || original.deletedAt || original.type !== 'expense') {
+      errors.refundOf = 'Pick the expense this refunds'
+    }
+  }
+  // Looked up lazily: callers that import statement rows open a transaction without these tables.
+  const links: [keyof TransactionInput & string, string | undefined, () => Promise<unknown>][] = [
+    ['loanId', t.loanId, () => db.loans.get(t.loanId!)],
+    ['subscriptionId', t.subscriptionId, () => db.subscriptions.get(t.subscriptionId!)],
+    ['holdingId', t.holdingId, () => db.holdings.get(t.holdingId!)],
+  ]
+  for (const [field, target, lookup] of links) {
+    if (!target) continue
+    const row = (await lookup()) as { deletedAt?: string } | undefined
+    if (!row || row.deletedAt) errors[field] = 'Not found'
   }
   if (Object.keys(errors).length > 0) throw new ValidationError(errors)
 }
@@ -56,7 +85,7 @@ export async function addTransaction(
     createdAt: now,
     updatedAt: now,
   })
-  await db.transaction('rw', db.transactions, db.accounts, db.categories, async () => {
+  await db.transaction('rw', txTables(fields), async () => {
     await assertReferences(fields)
     await db.transactions.add(transaction)
   })
@@ -66,7 +95,7 @@ export async function addTransaction(
 /** Replaces all editable fields. Editing a transaction also marks it as reviewed. */
 export async function updateTransaction(id: string, input: TransactionInput): Promise<Transaction> {
   const fields = transactionInputSchema.parse(input)
-  return db.transaction('rw', db.transactions, db.accounts, db.categories, async () => {
+  return db.transaction('rw', txTables(fields), async () => {
     const existing = await db.transactions.get(id)
     if (!existing || existing.deletedAt) throw new Error('This transaction no longer exists.')
     await assertReferences(fields)
@@ -148,7 +177,21 @@ export async function updateCategory(
 export type AccountInput = Pick<
   Account,
   'name' | 'type' | 'openingBalance' | 'aliases' | 'isDefault'
->
+> &
+  Partial<
+    Pick<
+      Account,
+      | 'institution'
+      | 'holder'
+      | 'last4'
+      | 'nominee'
+      | 'documentsNote'
+      | 'openingDate'
+      | 'creditLimit'
+      | 'statementDay'
+      | 'dueDay'
+    >
+  >
 
 async function clearOtherDefaults(exceptId: string, now: string): Promise<void> {
   const others = await db.accounts.filter((a) => a.isDefault && a.id !== exceptId).toArray()

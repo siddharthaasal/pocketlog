@@ -1,25 +1,82 @@
 import { z } from 'zod'
 import { decryptText, DecryptionError, encryptText, type EncryptedPayload } from '../lib/crypto'
 import {
+  accountBalanceSchema,
   accountSchema,
   categorySchema,
+  holdingSchema,
   inboxEntrySchema,
+  loanBalanceSchema,
+  loanSchema,
+  netWorthSnapshotSchema,
+  policySchema,
+  subscriptionSchema,
   transactionSchema,
+  valuationSchema,
   type Account,
+  type AccountBalance,
   type Category,
+  type Holding,
   type InboxEntry,
+  type Loan,
+  type LoanBalance,
+  type NetWorthSnapshot,
+  type Policy,
+  type Subscription,
   type Transaction,
+  type Valuation,
 } from './types'
 
-/** Bump when the file layout changes; older apps refuse newer files instead of guessing. */
-export const BACKUP_FORMAT = 1
+/**
+ * Bump when the file layout changes; older apps refuse newer files instead of guessing.
+ * 2 added the finance tracker tables. Format 1 files still import, with those tables empty.
+ */
+export const BACKUP_FORMAT = 2
 
 export interface BackupData {
   transactions: Transaction[]
   categories: Category[]
   accounts: Account[]
   inbox: InboxEntry[]
+  holdings: Holding[]
+  valuations: Valuation[]
+  loans: Loan[]
+  loanBalances: LoanBalance[]
+  subscriptions: Subscription[]
+  policies: Policy[]
+  accountBalances: AccountBalance[]
+  snapshots: NetWorthSnapshot[]
 }
+
+/** Tables whose rows are versioned records that merge last-writer-wins by `updatedAt`. */
+export const VERSIONED_TABLES = [
+  'transactions',
+  'categories',
+  'accounts',
+  'holdings',
+  'valuations',
+  'loans',
+  'loanBalances',
+  'subscriptions',
+  'policies',
+  'accountBalances',
+  'snapshots',
+] as const satisfies readonly (keyof BackupData)[]
+
+export const emptyBackupData = (): BackupData => ({
+  transactions: [],
+  categories: [],
+  accounts: [],
+  inbox: [],
+  holdings: [],
+  valuations: [],
+  loans: [],
+  loanBalances: [],
+  subscriptions: [],
+  policies: [],
+  accountBalances: [],
+  snapshots: [],
+})
 
 export interface BackupFile {
   app: 'pocketlog'
@@ -46,6 +103,14 @@ const ROW_SCHEMAS = {
   categories: categorySchema,
   accounts: accountSchema,
   inbox: inboxEntrySchema,
+  holdings: holdingSchema,
+  valuations: valuationSchema,
+  loans: loanSchema,
+  loanBalances: loanBalanceSchema,
+  subscriptions: subscriptionSchema,
+  policies: policySchema,
+  accountBalances: accountBalanceSchema,
+  snapshots: netWorthSnapshotSchema,
 } as const
 
 const envelopeSchema = z.object({
@@ -122,7 +187,7 @@ export async function readBackupText(text: string, passphrase?: string): Promise
   }
 
   const invalid: InvalidRow[] = []
-  const data: BackupData = { transactions: [], categories: [], accounts: [], inbox: [] }
+  const data = emptyBackupData()
   for (const table of Object.keys(ROW_SCHEMAS) as BackupTable[]) {
     const rows = parsed.data.data[table] ?? []
     if (!Array.isArray(rows)) {
