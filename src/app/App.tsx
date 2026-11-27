@@ -20,6 +20,7 @@ import { SubscriptionEditPage } from '../features/wealth/SubscriptionEditPage'
 import { SubscriptionsPage } from '../features/wealth/SubscriptionsPage'
 import { InsurancePage } from '../features/wealth/InsurancePage'
 import { PolicyEditPage } from '../features/wealth/PolicyEditPage'
+import { NetWorthPage } from '../features/wealth/NetWorthPage'
 import { Layout } from './Layout'
 
 export function App() {
@@ -34,8 +35,9 @@ export function App() {
         <Route path="/inbox" component={InboxPage} />
         <Route path="/reconcile" component={ReconcilePage} />
         <Route path="/wealth">
-          <Redirect to="/wealth/investments" replace />
+          <Redirect to="/wealth/net-worth" replace />
         </Route>
+        <Route path="/wealth/net-worth" component={NetWorthPage} />
         <Route path="/wealth/investments" component={InvestmentsPage} />
         <Route path="/wealth/investments/:id" component={HoldingEditPage} />
         <Route path="/wealth/loans" component={LoansPage} />

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { formatINR, formatINRCompact, niceCeiling, paiseToInput, parseRupees } from './money'
+import {
+  formatINR,
+  formatINRCompact,
+  niceCeiling,
+  paiseToInput,
+  parseRupees,
+  parseSignedRupees,
+} from './money'
 
 describe('parseRupees', () => {
   it.each([
@@ -62,5 +69,15 @@ describe('niceCeiling', () => {
     expect(niceCeiling(24_400_50)).toBe(25_000_00)
     expect(niceCeiling(10_000_00)).toBe(10_000_00)
     expect(niceCeiling(10_000_01)).toBe(15_000_00)
+  })
+})
+
+describe('parseSignedRupees', () => {
+  it('allows a leading minus', () => {
+    expect(parseSignedRupees('-500.50')).toBe(-50050)
+    expect(parseSignedRupees('−1,000')).toBe(-100000)
+    expect(parseSignedRupees('250')).toBe(25000)
+    expect(parseSignedRupees('abc')).toBeNull()
+    expect(parseSignedRupees('--5')).toBeNull()
   })
 })

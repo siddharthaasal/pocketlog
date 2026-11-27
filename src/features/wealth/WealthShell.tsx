@@ -5,6 +5,7 @@ import { cx } from '../../lib/cx'
 
 /** Sections of the Wealth area, in tab order. Each phase of the tracker adds its own. */
 export const WEALTH_SECTIONS = [
+  { href: '/wealth/net-worth', label: 'Net worth' },
   { href: '/wealth/investments', label: 'Investments' },
   { href: '/wealth/loans', label: 'Loans' },
   { href: '/wealth/subscriptions', label: 'Subscriptions' },
