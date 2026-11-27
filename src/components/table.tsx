@@ -42,9 +42,18 @@ export function Th({
   )
 }
 
-export function Td({ children, className }: { children?: ReactNode; className?: string }) {
+export function Td({
+  children,
+  className,
+  onClick,
+}: {
+  children?: ReactNode
+  className?: string
+  onClick?: (e: React.MouseEvent<HTMLTableCellElement>) => void
+}) {
   return (
     <td
+      onClick={onClick}
       className={cx(
         'h-[34px] truncate border-r border-b border-border px-2 align-middle whitespace-nowrap last:border-r-0',
         className,
