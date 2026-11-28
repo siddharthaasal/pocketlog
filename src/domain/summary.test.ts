@@ -48,3 +48,24 @@ describe('refunds', () => {
     expect(s.expenseByCategory).toEqual([{ categoryId: 'cat-shopping', amount: 30000 }])
   })
 })
+
+describe('split expenses', () => {
+  it('count each part against its own category', () => {
+    const s = summarize([
+      tx({
+        amount: 1000_00,
+        categoryId: 'cat-groceries',
+        splits: [
+          { categoryId: 'cat-groceries', amount: 700_00 },
+          { categoryId: 'cat-home', amount: 300_00 },
+        ],
+      }),
+      tx({ amount: 50_00, categoryId: 'cat-home' }),
+    ])
+    expect(s.expense).toBe(1050_00)
+    expect(s.expenseByCategory).toEqual([
+      { categoryId: 'cat-groceries', amount: 700_00 },
+      { categoryId: 'cat-home', amount: 350_00 },
+    ])
+  })
+})

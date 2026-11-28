@@ -7,9 +7,9 @@ import { cx } from '../../lib/cx'
 export const WEALTH_SECTIONS = [
   { href: '/wealth/net-worth', label: 'Net worth' },
   { href: '/wealth/investments', label: 'Investments' },
-  { href: '/wealth/loans', label: 'Loans' },
   { href: '/wealth/subscriptions', label: 'Subscriptions' },
   { href: '/wealth/insurance', label: 'Insurance' },
+  { href: '/wealth/loans', label: 'Loans' },
 ] as const
 
 export function WealthShell({ children, action }: { children: ReactNode; action?: ReactNode }) {
@@ -63,7 +63,7 @@ export function Stat({
 }
 
 export const percent = (value: number | null, digits = 1) =>
-  value === null ? '—' : `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(digits)}%`
+  value === null ? '-' : `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(digits)}%`
 
 export const bpsText = (bps: number | null) =>
-  bps === null ? '—' : `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%`
+  bps === null ? '-' : `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%`

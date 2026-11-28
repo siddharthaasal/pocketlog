@@ -19,12 +19,18 @@ export function TransactionRow({
   const toAccount = t.toAccountId ? lookups.accounts.get(t.toAccountId) : undefined
 
   const title =
-    t.description || t.merchant || category?.name || (t.type === 'transfer' ? 'Transfer' : '—')
+    t.description || t.merchant || category?.name || (t.type === 'transfer' ? 'Transfer' : '-')
   const subtitle = [
     showDate && formatDayHeading(t.date),
     ...(t.type === 'transfer'
       ? [`${account?.name ?? '?'} → ${toAccount?.name ?? '?'}`]
-      : [category?.name, account?.name]),
+      : [
+          t.splits && t.splits.length > 1
+            ? `${category?.name ?? '?'} + ${t.splits.length - 1} more`
+            : category?.name,
+          account?.name,
+        ]),
+    ...(t.tags ?? []).map((tag) => `#${tag}`),
   ]
     .filter(Boolean)
     .join(' · ')

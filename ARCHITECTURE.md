@@ -1,4 +1,4 @@
-# PocketLog — Architecture (Phase 0)
+# PocketLog - Architecture (Phase 0)
 
 Single-user, local-first expense tracker for iPhone + Mac. Supersedes the open questions in `plan.md`; where the two disagree, this file wins.
 
@@ -20,7 +20,7 @@ Single-user, local-first expense tracker for iPhone + Mac. Supersedes the open q
 
 React + TypeScript (strict) · Vite · Tailwind CSS · `vite-plugin-pwa` (Workbox service worker, manifest) · Dexie + `dexie-react-hooks` (`useLiveQuery` gives reactive queries, so no state library) · hand-drawn SVG charts (one small column chart didn't justify ~100 KB of Recharts) · Zod (validation of form input and imported JSON) · `wouter` (tiny router) · Vitest · oxlint (the current Vite template default, replacing ESLint) · Prettier.
 
-No date library — dates are stored as local `YYYY-MM-DD` strings and handled with small helpers + `Intl`. IDs via `crypto.randomUUID()`.
+No date library - dates are stored as local `YYYY-MM-DD` strings and handled with small helpers + `Intl`. IDs via `crypto.randomUUID()`.
 
 ## 3. Folder structure
 
@@ -45,7 +45,7 @@ Rule: `domain/` and `parser/` import nothing from `data/`, `features/` or React.
 
 ## 4. Data model (Dexie schema v2; §12 lists what v2 added)
 
-All entities carry `createdAt`, `updatedAt` (ISO timestamps) and `deletedAt?` (soft delete — needed so deletions survive merge-sync). Lists hide soft-deleted rows; "Delete all data" hard-wipes.
+All entities carry `createdAt`, `updatedAt` (ISO timestamps) and `deletedAt?` (soft delete - needed so deletions survive merge-sync). Lists hide soft-deleted rows; "Delete all data" hard-wipes.
 
 **Transaction**
 
@@ -69,13 +69,13 @@ All entities carry `createdAt`, `updatedAt` (ISO timestamps) and `deletedAt?` (s
 }
 ```
 
-**Category** `{ id, name, type: 'expense'|'income', icon, color, keywords: string[], archived, … }` — `keywords` drive the parser ("lunch", "swiggy", "zomato" → Food & Dining). Editable in Settings.
+**Category** `{ id, name, type: 'expense'|'income', icon, color, keywords: string[], archived, … }` - `keywords` drive the parser ("lunch", "swiggy", "zomato" → Food & Dining). Editable in Settings.
 
-**Account** `{ id, name, type: 'cash'|'bank'|'credit_card'|'wallet', openingBalance (paise, may be negative), currency, aliases: string[], isDefault, archived, … }` — `aliases` drive the parser ("hdfc", "hdfc bank").
+**Account** `{ id, name, type: 'cash'|'bank'|'credit_card'|'wallet', openingBalance (paise, may be negative), currency, aliases: string[], isDefault, archived, … }` - `aliases` drive the parser ("hdfc", "hdfc bank").
 
-**InboxEntry** `{ key (hash of raw line), rawText, recordedAt, status: 'imported'|'skipped', transactionId? }` — dedupes Siri inbox imports.
+**InboxEntry** `{ key (hash of raw line), rawText, recordedAt, status: 'imported'|'skipped', transactionId? }` - dedupes Siri inbox imports.
 
-**Meta** `{ key, value }` — `lastBackupAt`, `lastSyncAt`, device name.
+**Meta** `{ key, value }` - `lastBackupAt`, `lastSyncAt`, device name.
 
 Indexes: `transactions: id, date, type, categoryId, accountId, toAccountId, updatedAt`.
 
@@ -102,7 +102,7 @@ What we protect: the transaction history on your devices and in exported files.
 | Lost/stolen device                | iOS/macOS passcode + device encryption.                                                                                                                                                                 |
 | Malicious code shipped to the app | You control the repo and deploys; minimal deps; no runtime third-party scripts; strict CSP (`default-src 'self'`); no analytics.                                                                        |
 | iOS clears browser storage        | `navigator.storage.persist()`; installed Home Screen apps are exempt from Safari's 7-day eviction; **backup reminder** on the dashboard when last backup > 7 days; one-tap backup to Files.             |
-| Backup / sync file leaks          | Optional passphrase encryption (AES-GCM, key derived with PBKDF2 via Web Crypto). Files in iCloud Drive are readable by Apple unless Advanced Data Protection is on — documented on the Privacy screen. |
+| Backup / sync file leaks          | Optional passphrase encryption (AES-GCM, key derived with PBKDF2 via Web Crypto). Files in iCloud Drive are readable by Apple unless Advanced Data Protection is on - documented on the Privacy screen. |
 | Siri dictation                    | Processed by Apple (on-device for supported languages). Inbox file stored in **On My iPhone** by default, not iCloud.                                                                                   |
 | Bad imported data                 | Every import validated with Zod; invalid rows reported, never silently dropped. Import is a merge preview before anything is written.                                                                   |
 
@@ -184,13 +184,31 @@ Replaces the "Personal Finance Tracker" spreadsheet. Everything stays on the dev
 | `accountBalances`        | The balance a statement printed on a date (`ab-<account>-<date>`), saved from Reconcile; drives the drift warning |
 | `snapshots`              | A closed month of net worth, frozen (`id = month`)                                                                |
 
-New optional fields: `Transaction.loanId / subscriptionId / holdingId / refundOf`; `Account.institution / holder / last4 / nominee / documentsNote / openingDate / creditLimit / statementDay / dueDay` and type `investment`. Settings live in `meta` (`allocation.targets`, `networth.investedBefore`, `subscriptions.ignore`).
+New optional fields: `Transaction.loanId / subscriptionId / holdingId / refundOf`; `Account.institution / holder / last4 / nominee / documentsNote / openingDate / creditLimit / statementDay / dueDay` and type `investment`. Settings live in `meta` (`networth.investedBefore`, `subscriptions.ignore`).
 
 **Backup format 2** includes the new tables. Format 1 files still import (the new lists are empty); a format 1 app refuses format 2 files rather than dropping data silently.
 
+**Schema v3 / backup format 3** adds `allocationGroups` (`{ name, target (bps), order }`, versioned like the rest) and `Holding.groupId`. You name the rows of the Allocation table yourself (one per fund, or a theme like Gold) and each holding picks one; holdings with no group, or a deleted one, share a "No group" row with no target. The asset class stays on the holding for what kind of thing it is (Home's "In equity" figure) but no longer drives Allocation, and savings no longer count in it. The v3 upgrade turns the old per-class targets in `meta.allocation.targets` into groups with fixed ids (`ag-<class>`), so two devices that upgrade apart make the same groups.
+
 **Refunds**: an income entry with `refundOf` carries the refunded expense's category and counts against that spending, not as income, so the savings rate is not inflated (`domain/summary.ts`). Splitting one payment across categories is not supported; use two entries.
 
-**Wealth section** (`/wealth/*`, `features/wealth`): Net worth, Investments (gain, XIRR from tagged transfers, target mix with Over/Under at ±2 points), Loans (balance estimate rolled forward from interest and tagged repayments), Subscriptions (recurring-payment detection: three charges about a month apart, or two about a year apart, for similar amounts), Insurance. Closing a month fills every net worth line from accounts, valuations and loan balances; any figure can be changed before the snapshot is frozen. Pure logic is in `domain/{investments,loans,recurring,networth}.ts` with tests.
+**Wealth section** (`/wealth/*`, `features/wealth`): Net worth, Investments (gain, XIRR from tagged transfers, your allocation groups against their targets, flagged Over/Under at ±2 points or a fifth of the target if less), Loans (balance estimate rolled forward from interest and tagged repayments), Subscriptions (recurring-payment detection: three charges about a month apart, or two about a year apart, for similar amounts), Insurance. Closing a month fills every net worth line from accounts, valuations and loan balances; any figure can be changed before the snapshot is frozen. Pure logic is in `domain/{investments,loans,recurring,networth}.ts` with tests.
+
+**Budgets** (`/budgets`, `features/budgets`, `domain/budgets.ts`): an optional `Category.budget` (paise per month, expense categories only; unindexed, so no Dexie migration, and it travels in backups with the category). Spending is net of refunds, as everywhere else. A budget is "close" at 80% and "over" past 100%; bars carry a line at the share of the month gone by, so being ahead of an even pace shows before the limit is hit. Home lists the budgeted categories, most used first; the Budgets page is a table of every expense category where all budgets are edited at once.
+
+**Emergency fund** (Home): savings (bank, cash and wallet balances; not credit cards or investment accounts) ÷ average monthly spending over the last 6 full months, skipping months with no entries so the time before you started doesn't lower the average. The target (3, 6 or 12 months) is a device preference in `meta` (`emergency.targetMonths`), set in Settings.
+
+**Groww import** (`/wealth/investments/import`, `parser/groww.ts`, `domain/holdingImport.ts`, `data/holdingImport.ts`): reads Groww's two holdings reports as downloaded (.xlsx): mutual funds (folio, units, invested, current value) and stocks (ISIN, quantity, buy value, closing price and value). The table is found by its column names and the month comes from the report's "as on" date, written either `2026-11-28` or `27-11-2026`. Checks: quantity × closing price must equal the closing value (stocks), and the rows must add up to the total the report printed; failures are shown, and bad rows default to Skip. Matching: by ISIN (shares, ETFs) or folio (funds; when one folio holds several schemes the names must agree too), else a name suggestion marked "by name" among holdings not yet linked. Saving is all or nothing: new holdings are created, matched ones get `isin`/`folio` (optional, unindexed `Holding` fields) so the next import needs no choices, and each row becomes that month's valuation (invested and worth), replacing one already there. The files are read on the device and not stored. A CAMS/KFintech or NSDL/CDSL statement would carry the same figures, but as a password-protected PDF and without shares (CAMS), so Groww's spreadsheets are the supported source.
+
+**Emergency money**: `Holding.emergency` marks money kept for emergencies, like a liquid fund. It counts towards the emergency fund on Home at its latest value and is left out of Allocation, whose targets describe the invested mix.
+
+**Tags and split payments** (optional `Transaction` fields, unindexed, so no Dexie migration): `tags` are lowercase labels such as "goa trip", searchable and filterable on Transactions. `splits` divides one expense across categories (`{ categoryId, amount }[]`, at least two, each category once, adding up to `amount`, the first part's category stored as `categoryId`). Balances, bank matching and Reconcile still see one payment; `summarize` (and so Home, Budgets and Analytics) counts each part against its own category, and the category filter matches any part. The CSV export writes the parts ("Groceries 1800 + Personal Care 600") and a Tags column.
+
+**Bulk changes**: ticked rows of the desktop Transactions table can get a category, move to an account, gain or lose a tag, or be deleted, all at once (`bulkUpdateTransactions`, all or nothing). Rows a change doesn't fit are left alone and counted: transfers take no category, income keeps an income category, splits keep their parts, and a transfer can't come from the account it goes to.
+
+**Navigation**: the sidebar lists Accounts and Budgets; the phone's tab bar keeps Home, Transactions, Add, Analytics and Wealth, and a More tab leads to Accounts, Budgets, Reconcile, the Siri inbox and Settings.
+
+**Sync status**: backup files carry the kind of device that made them (`device`: "iPhone", "Mac", …, from the user agent; nothing more specific). Merging or restoring one records `meta.lastSyncAt` (`{ at, exportedAt, from }`), shown on Backup & sync ("Last synced 4 days ago, from your Mac") and on its Settings row.
 
 ## 13. Email layer (reconciling swept emails)
 

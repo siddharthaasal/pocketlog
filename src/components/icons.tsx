@@ -3,13 +3,16 @@ import {
   ChartColumn,
   ChevronLeft,
   ChevronRight,
+  Ellipsis,
   FileCheck,
+  Gauge,
   House,
   List,
   Mic,
   Plus,
   SlidersHorizontal,
   TrendingUp,
+  Wallet,
   type LucideProps,
 } from 'lucide-react'
 
@@ -41,4 +44,7 @@ export const ChartIcon = make(ChartColumn)
 export const ReconcileIcon = make(FileCheck)
 export const MicIcon = make(Mic)
 export const WealthIcon = make(TrendingUp)
+export const AccountsIcon = make(Wallet)
+export const BudgetsIcon = make(Gauge)
+export const MoreIcon = make(Ellipsis)
 export const TransferIcon = make(ArrowLeftRight)

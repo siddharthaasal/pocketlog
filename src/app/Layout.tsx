@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'wouter'
 import {
+  AccountsIcon,
+  BudgetsIcon,
   ChartIcon,
   HomeIcon,
   ListIcon,
+  MoreIcon,
   PlusIcon,
   ReconcileIcon,
   SettingsIcon,
@@ -15,14 +18,29 @@ import { UpdatePrompt } from './UpdatePrompt'
 const NAV = [
   { href: '/', label: 'Home', icon: HomeIcon },
   { href: '/transactions', label: 'Transactions', icon: ListIcon },
+  { href: '/accounts', label: 'Accounts', icon: AccountsIcon },
+  { href: '/budgets', label: 'Budgets', icon: BudgetsIcon },
   { href: '/analytics', label: 'Analytics', icon: ChartIcon },
   { href: '/wealth', label: 'Wealth', icon: WealthIcon },
   { href: '/reconcile', label: 'Reconcile', icon: ReconcileIcon },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ] as const
 
-/** Six items fit a phone's tab bar; Reconcile is a desktop task and lives in Settings there. */
-const MOBILE_NAV = NAV.filter((item) => item.href !== '/reconcile')
+/** Pages the phone's tab bar has no room for; its More tab lists them. */
+const MORE_PAGES = ['/accounts', '/budgets', '/reconcile', '/settings', '/inbox', '/more']
+
+/** Five items and the add button fit a phone's tab bar. */
+const MOBILE_NAV = [
+  ...NAV.filter((item) => !MORE_PAGES.includes(item.href)),
+  { href: '/more', label: 'More', icon: MoreIcon },
+] as const
+
+/** More stays lit on every page it leads to. */
+function tabActive(location: string, href: string) {
+  return href === '/more'
+    ? MORE_PAGES.some((p) => location.startsWith(p))
+    : isActive(location, href)
+}
 
 function isActive(location: string, href: string) {
   return href === '/' ? location === '/' : location.startsWith(href)
@@ -68,7 +86,7 @@ export function Layout({ children }: { children: ReactNode }) {
           'mx-auto w-full min-w-0 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] md:pt-8 md:pb-12',
           location.startsWith('/reconcile') || location.startsWith('/wealth')
             ? 'max-w-6xl md:px-5'
-            : location === '/transactions'
+            : location === '/transactions' || location === '/accounts'
               ? 'max-w-5xl md:px-6'
               : 'max-w-3xl md:px-8',
         )}
@@ -79,7 +97,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Mobile tab bar */}
       <nav className="fixed inset-x-0 bottom-0 z-10 flex border-t border-border bg-bg/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden">
         {MOBILE_NAV.slice(0, 2).map((item) => (
-          <TabLink key={item.href} {...item} active={isActive(location, item.href)} />
+          <TabLink key={item.href} {...item} active={tabActive(location, item.href)} />
         ))}
         <Link
           href="/add"
@@ -91,7 +109,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </span>
         </Link>
         {MOBILE_NAV.slice(2).map((item) => (
-          <TabLink key={item.href} {...item} active={isActive(location, item.href)} />
+          <TabLink key={item.href} {...item} active={tabActive(location, item.href)} />
         ))}
       </nav>
 

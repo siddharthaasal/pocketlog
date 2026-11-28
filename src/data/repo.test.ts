@@ -6,9 +6,13 @@ import {
   addAccount,
   addCategory,
   addTransaction,
+  bulkUpdateTransactions,
   deleteTransaction,
+  deleteTransactions,
   pickDefaultAccount,
+  setCategoryBudgets,
   updateAccount,
+  updateCategory,
   updateTransaction,
 } from './repo'
 import { SEED_ACCOUNTS, SEED_CATEGORIES } from './seed'
@@ -129,5 +133,115 @@ describe('categories and accounts', () => {
     const accounts = await db.accounts.toArray()
     expect(accounts.some((a) => a.isDefault)).toBe(false)
     expect(pickDefaultAccount(accounts)?.archived).toBe(false)
+  })
+})
+
+describe('category budgets', () => {
+  it('sets and clears several budgets together, and never on income categories', async () => {
+    await setCategoryBudgets([
+      { id: 'cat-food', budget: 8_000_00 },
+      { id: 'cat-fuel', budget: 3_000_00 },
+      { id: 'cat-salary', budget: 1_00 },
+    ])
+    expect((await db.categories.get('cat-food'))?.budget).toBe(8_000_00)
+    expect((await db.categories.get('cat-salary'))?.budget).toBeUndefined()
+
+    const before = (await db.categories.get('cat-fuel'))!.updatedAt
+    await setCategoryBudgets([
+      { id: 'cat-food', budget: undefined },
+      { id: 'cat-fuel', budget: 3_000_00 },
+    ])
+    expect((await db.categories.get('cat-food'))?.budget).toBeUndefined()
+    // Unchanged budgets aren't rewritten, so a sync doesn't see an edit.
+    expect((await db.categories.get('cat-fuel'))?.updatedAt).toBe(before)
+  })
+
+  it('drops a budget from an income category when saving it', async () => {
+    const c = await addCategory({
+      name: 'Bonus',
+      type: 'income',
+      icon: 'gift',
+      color: '#2f9e44',
+      keywords: [],
+      budget: 5_00,
+    })
+    expect(c.budget).toBeUndefined()
+    await updateCategory('cat-food', { budget: 4_000_00 })
+    expect((await db.categories.get('cat-food'))?.budget).toBe(4_000_00)
+  })
+
+  it('rejects a budget of zero or less', async () => {
+    await expect(updateCategory('cat-food', { budget: 0 })).rejects.toThrow()
+  })
+})
+
+describe('splits and bulk changes', () => {
+  it('saves a split, and rejects a part with no expense category', async () => {
+    const t = await addTransaction({
+      ...lunch,
+      amount: 1000_00,
+      categoryId: 'cat-food',
+      splits: [
+        { categoryId: 'cat-food', amount: 600_00 },
+        { categoryId: 'cat-groceries', amount: 400_00 },
+      ],
+    })
+    expect(t.splits).toHaveLength(2)
+    await expect(
+      addTransaction({
+        ...lunch,
+        amount: 1000_00,
+        splits: [
+          { categoryId: 'cat-food', amount: 600_00 },
+          { categoryId: 'cat-salary', amount: 400_00 },
+        ],
+      }),
+    ).rejects.toThrow(/expense category/)
+  })
+
+  it('changes several at once and leaves the ones it does not fit', async () => {
+    const a = await addTransaction({ ...lunch, tags: ['work'] })
+    const b = await addTransaction({ ...lunch, description: 'Dinner' })
+    const pay = await addTransaction({
+      type: 'income',
+      amount: 100_00,
+      description: 'Pay',
+      categoryId: 'cat-salary',
+      accountId: 'acc-hdfc',
+      date: '2026-11-02',
+    })
+    const move = await addTransaction({
+      type: 'transfer',
+      amount: 100_00,
+      description: 'ATM',
+      accountId: 'acc-hdfc',
+      toAccountId: 'acc-cash',
+      date: '2026-11-02',
+    })
+    const all = [a.id, b.id, pay.id, move.id]
+
+    expect(
+      await bulkUpdateTransactions(all, { kind: 'category', categoryId: 'cat-groceries' }),
+    ).toEqual({ updated: 2, skipped: 2 })
+    expect((await db.transactions.get(b.id))?.categoryId).toBe('cat-groceries')
+    expect((await db.transactions.get(pay.id))?.categoryId).toBe('cat-salary')
+
+    // The transfer already goes to Cash, so it can't also come from it.
+    expect(await bulkUpdateTransactions(all, { kind: 'account', accountId: 'acc-cash' })).toEqual({
+      updated: 3,
+      skipped: 1,
+    })
+
+    expect(await bulkUpdateTransactions(all, { kind: 'addTag', tag: ' Work ' })).toEqual({
+      updated: 3,
+      skipped: 1,
+    })
+    expect((await db.transactions.get(b.id))?.tags).toEqual(['work'])
+    await bulkUpdateTransactions(all, { kind: 'removeTag', tag: 'work' })
+    expect((await db.transactions.get(a.id))?.tags).toBeUndefined()
+
+    await deleteTransactions([a.id, b.id])
+    expect((await db.transactions.get(a.id))?.deletedAt).toBeDefined()
+    expect((await db.transactions.get(pay.id))?.deletedAt).toBeUndefined()
   })
 })

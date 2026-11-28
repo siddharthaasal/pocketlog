@@ -13,6 +13,12 @@ export interface PeriodSummary {
   expenseByCategory: CategoryTotal[]
 }
 
+/** How a transaction's amount divides across categories: its split parts, or all of it in one. */
+export function categoryParts(t: Transaction): CategoryTotal[] {
+  if (t.splits && t.splits.length > 0) return t.splits
+  return [{ categoryId: t.categoryId ?? 'uncategorised', amount: t.amount }]
+}
+
 /** Totals for a set of transactions. Transfers and deleted rows never count. */
 export function summarize(transactions: readonly Transaction[]): PeriodSummary {
   let income = 0
@@ -31,8 +37,9 @@ export function summarize(transactions: readonly Transaction[]): PeriodSummary {
       income += t.amount
     } else if (t.type === 'expense') {
       expense += t.amount
-      const key = t.categoryId ?? 'uncategorised'
-      byCategory.set(key, (byCategory.get(key) ?? 0) + t.amount)
+      for (const part of categoryParts(t)) {
+        byCategory.set(part.categoryId, (byCategory.get(part.categoryId) ?? 0) + part.amount)
+      }
     }
   }
 

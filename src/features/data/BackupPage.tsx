@@ -2,13 +2,16 @@ import { useState, type ChangeEvent, type ReactNode } from 'react'
 import { Button, Card, Field, PageHeader, SectionTitle, TextInput } from '../../components/ui'
 import {
   LAST_BACKUP_KEY,
+  LAST_SYNC_KEY,
   applyMerge,
   deleteAllData,
   exportBackupText,
   exportCsvText,
   previewMerge,
   recordBackup,
+  recordSync,
   replaceAll,
+  type LastSync,
 } from '../../data/backup'
 import { useAllTransactions, useMeta } from '../../data/hooks'
 import { readBackupText, type BackupFile, type InvalidRow } from '../../domain/backup'
@@ -16,6 +19,7 @@ import type { MergeCounts, MergePlan } from '../../domain/merge'
 import { todayISO } from '../../lib/dates'
 import { formatBytes, saveFile } from '../../lib/files'
 import { daysSince, describeDaysAgo } from '../../lib/relative'
+import { describeSync } from './syncText'
 
 const MIN_PASSPHRASE = 8
 
@@ -221,6 +225,7 @@ type ImportState =
     }
 
 function ImportSection() {
+  const lastSync = useMeta<LastSync>(LAST_SYNC_KEY)
   const [state, setState] = useState<ImportState>({ step: 'idle' })
   const [passphrase, setPassphrase] = useState('')
   const [message, setMessage] = useState<string | null>(null)
@@ -261,6 +266,7 @@ function ImportSection() {
     setBusy(true)
     try {
       const plan = await applyMerge(backup.data)
+      await recordSync(backup)
       const t = plan.counts.transactions
       setMessage(`Merged: ${t.added} new, ${t.updated} updated, ${t.deleted} deleted transactions.`)
       setState({ step: 'idle' })
@@ -275,6 +281,7 @@ function ImportSection() {
     setBusy(true)
     try {
       await replaceAll(backup.data)
+      await recordSync(backup)
       setMessage('Restored. This device now matches the backup.')
       setState({ step: 'idle' })
     } catch (e) {
@@ -288,6 +295,13 @@ function ImportSection() {
     <section>
       <SectionTitle>Merge or restore</SectionTitle>
       <Card className="space-y-4 p-5">
+        <p className="text-[14px] text-muted">
+          {lastSync === undefined
+            ? ' '
+            : lastSync.value
+              ? describeSync(lastSync.value)
+              : 'You haven’t merged a file from another device yet.'}
+        </p>
         {state.step === 'idle' && (
           <label
             className={`flex h-11 cursor-pointer items-center justify-center rounded-xl bg-surface-2 text-[15px] font-medium hover:opacity-80 ${busy ? 'pointer-events-none opacity-40' : ''}`}

@@ -44,11 +44,21 @@ const transactionInputShape = {
   holdingId: id.optional(),
   /** On an income entry: the expense this refunds or reimburses. */
   refundOf: id.optional(),
+  /** Your own labels, like "goa trip", for spending that crosses categories. Lowercase. */
+  tags: z.array(z.string().trim().toLowerCase().min(1).max(30)).max(10).optional(),
+  /**
+   * One expense paid across several categories, e.g. a supermarket bill that is part groceries,
+   * part household. The parts add up to `amount`; `categoryId` is the first part's. Balances and
+   * bank matching see one payment; spending totals see the parts.
+   */
+  splits: z.array(z.object({ categoryId: id, amount: paise.positive() })).optional(),
 }
 
 type TransactionLike = {
   type: TransactionType
+  amount: number
   categoryId?: string | undefined
+  splits?: { categoryId: string; amount: number }[] | undefined
   accountId: string
   toAccountId?: string | undefined
   refundOf?: string | undefined
@@ -90,6 +100,24 @@ function refineTransaction(t: TransactionLike, ctx: z.RefinementCtx) {
       ctx.addIssue({ code: 'custom', path: ['refundOf'], message: 'Only income can be a refund' })
     }
   }
+  if (t.splits) {
+    const issue = splitProblem(t)
+    if (issue) ctx.addIssue({ code: 'custom', path: ['splits'], message: issue })
+  }
+}
+
+/** Why a split doesn't hold together, or null. */
+function splitProblem(t: TransactionLike): string | null {
+  const parts = t.splits ?? []
+  if (t.type !== 'expense') return 'Only expenses can be split'
+  if (parts.length < 2) return 'A split needs at least two parts'
+  if (new Set(parts.map((p) => p.categoryId)).size !== parts.length) {
+    return 'Use each category once in a split'
+  }
+  if (parts[0]!.categoryId !== t.categoryId) return 'The first part sets the category'
+  const sum = parts.reduce((s, p) => s + p.amount, 0)
+  if (sum !== t.amount) return 'The parts must add up to the amount'
+  return null
 }
 
 /** What a user (or the parser) supplies; metadata is added by the repository. */
@@ -117,6 +145,8 @@ export const categorySchema = z.object({
   color: z.string().regex(/^#[0-9a-f]{6}$/i),
   /** Words that map dictated text to this category, e.g. "lunch", "swiggy". */
   keywords: z.array(z.string().trim().toLowerCase().min(1)),
+  /** Monthly spending limit in paise. Expense categories only. */
+  budget: paise.positive('Enter a budget above zero').optional(),
   archived: z.boolean(),
 })
 
@@ -193,11 +223,31 @@ export const holdingSchema = z.object({
   platform: optionalText(60),
   /** The demat or investment account it sits in. */
   accountId: id.optional(),
+  /** The allocation group it counts towards. None, or a deleted group, means "No group". */
+  groupId: id.optional(),
+  /** Money kept for emergencies, like a liquid fund: counts towards the emergency fund on Home and is left out of Allocation. */
+  emergency: z.boolean().optional(),
+  /** Set by an import, so the next one finds this holding again: ISIN for shares and ETFs, folio for funds. */
+  isin: z
+    .string()
+    .regex(/^IN[A-Z0-9]{10}$/, 'Not an ISIN')
+    .optional(),
+  folio: optionalText(30),
   /** Basis points: 710 = 7.10%. For FDs, PPF and bonds. */
   interestRate: z.number().int().min(0).max(10000).optional(),
   maturityDate: z.iso.date().optional(),
   notes: optionalText(500),
   archived: z.boolean(),
+})
+
+/** A row of the Allocation table: a name you choose and a target share of your investments. */
+export const allocationGroupSchema = z.object({
+  ...recordMeta,
+  name: z.string().trim().min(1, 'Enter a name').max(40),
+  /** Basis points: 2500 = 25%. */
+  target: z.number().int().min(0).max(10000),
+  /** Position in the table, smallest first. */
+  order: z.number().int().min(0),
 })
 
 /** What one holding was worth at the end of a month, and how much had gone in by then. */
@@ -337,6 +387,7 @@ export const netWorthSnapshotSchema = z.object({
 
 export type Holding = z.output<typeof holdingSchema>
 export type Valuation = z.output<typeof valuationSchema>
+export type AllocationGroup = z.output<typeof allocationGroupSchema>
 export type Loan = z.output<typeof loanSchema>
 export type LoanBalance = z.output<typeof loanBalanceSchema>
 export type Subscription = z.output<typeof subscriptionSchema>

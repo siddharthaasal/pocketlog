@@ -1,15 +1,25 @@
 import { useEffect, useState } from 'react'
 import { Card, PageHeader, Segmented, SectionTitle } from '../../components/ui'
-import { useAccounts, useCategories } from '../../data/hooks'
+import { LAST_BACKUP_KEY, LAST_SYNC_KEY, type LastSync } from '../../data/backup'
+import { useCategories, useMeta } from '../../data/hooks'
+import { shortStatus } from '../data/syncText'
 import { isStoragePersistent, requestPersistentStorage } from '../../data/storage'
+import {
+  EMERGENCY_TARGET_OPTIONS,
+  saveEmergencyTarget,
+  useEmergencyTarget,
+  type EmergencyTarget,
+} from '../../data/networth'
 import { THEME_OPTIONS, setThemePreference, useThemePreference } from '../../lib/theme'
 import { SettingsRow } from './SettingsList'
 
 export function SettingsPage() {
   const categories = useCategories()
-  const accounts = useAccounts()
   const [persistent, setPersistent] = useState<boolean | null>(null)
   const theme = useThemePreference()
+  const emergencyTarget = useEmergencyTarget()
+  const lastSync = useMeta<LastSync>(LAST_SYNC_KEY)
+  const lastBackup = useMeta<string>(LAST_BACKUP_KEY)
 
   useEffect(() => {
     void isStoragePersistent().then(setPersistent)
@@ -30,13 +40,7 @@ export function SettingsPage() {
               title="Categories"
               detail={activeCount(categories)}
             />
-            <SettingsRow
-              href="/settings/accounts"
-              title="Accounts"
-              detail={activeCount(accounts)}
-            />
             <SettingsRow href="/inbox" title="Siri inbox" />
-            <SettingsRow href="/reconcile" title="Reconcile bank statement" />
           </Card>
         </section>
 
@@ -54,12 +58,37 @@ export function SettingsPage() {
           <p className="mt-2 px-1 text-[13px] text-muted">
             System follows your device. The choice is kept on this device only.
           </p>
+          <Card className="mt-4 divide-y divide-border overflow-hidden">
+            <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <span className="text-[15px]">Emergency fund target</span>
+              <div className="sm:w-80">
+                {emergencyTarget !== undefined && (
+                  <Segmented
+                    value={String(emergencyTarget)}
+                    options={EMERGENCY_TARGET_OPTIONS.map((n) => ({
+                      value: String(n),
+                      label: `${n} months`,
+                    }))}
+                    onChange={(v) => void saveEmergencyTarget(Number(v) as EmergencyTarget)}
+                  />
+                )}
+              </div>
+            </div>
+          </Card>
+          <p className="mt-2 px-1 text-[13px] text-muted">
+            How many months of your usual spending your savings accounts should cover. Shown on
+            Home.
+          </p>
         </section>
 
         <section>
           <SectionTitle>Your data</SectionTitle>
           <Card className="divide-y divide-border overflow-hidden">
-            <SettingsRow href="/settings/data" title="Backup & sync" />
+            <SettingsRow
+              href="/settings/data"
+              title="Backup & sync"
+              detail={shortStatus(lastSync?.value, lastBackup?.value)}
+            />
             <SettingsRow href="/settings/privacy" title="Privacy" />
           </Card>
         </section>

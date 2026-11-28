@@ -187,7 +187,7 @@ function PolicyForm({ existing }: { existing: Policy | undefined }) {
           <div className="grid grid-cols-2 gap-3">
             <Field label="Paid from" error={errors.accountId}>
               <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-                <option value="">—</option>
+                <option value="">-</option>
                 {accounts
                   ?.filter((a) => !a.archived || a.id === accountId)
                   .map((a) => (

@@ -13,7 +13,13 @@ import {
   TextArea,
   TextInput,
 } from '../../components/ui'
-import { useAccounts, useAllTransactions, useHoldings, useValuations } from '../../data/hooks'
+import {
+  useAccounts,
+  useAllocationGroups,
+  useAllTransactions,
+  useHoldings,
+  useValuations,
+} from '../../data/hooks'
 import {
   deleteValuation,
   saveHolding,
@@ -62,11 +68,14 @@ export function HoldingEditPage() {
 function HoldingForm({ existing }: { existing: Holding | undefined }) {
   const [, navigate] = useLocation()
   const accounts = useAccounts()
+  const groups = useAllocationGroups()
   const [name, setName] = useState(existing?.name ?? '')
   const [kind, setKind] = useState<HoldingKind>(existing?.kind ?? 'mutual_fund')
   const [assetClass, setAssetClass] = useState<AssetClass>(existing?.assetClass ?? 'equity')
   const [platform, setPlatform] = useState(existing?.platform ?? '')
   const [accountId, setAccountId] = useState(existing?.accountId ?? '')
+  const [groupId, setGroupId] = useState(existing?.groupId ?? '')
+  const [emergency, setEmergency] = useState(existing?.emergency ?? false)
   const [rate, setRate] = useState(
     existing?.interestRate !== undefined ? String(existing.interestRate / 100) : '',
   )
@@ -102,6 +111,8 @@ function HoldingForm({ existing }: { existing: Holding | undefined }) {
       assetClass,
       platform: platform.trim() || undefined,
       accountId: accountId || undefined,
+      groupId: groupId || undefined,
+      emergency: emergency || undefined,
       interestRate: percent === undefined ? undefined : Math.round(percent * 100),
       maturityDate: maturity || undefined,
       notes: notes.trim() || undefined,
@@ -147,6 +158,38 @@ function HoldingForm({ existing }: { existing: Holding | undefined }) {
               </Select>
             </Field>
           </div>
+          <Field
+            label="Allocation group"
+            hint="Which row of the Allocation table it counts towards"
+            error={errors.groupId}
+          >
+            <Select
+              value={groupId}
+              disabled={emergency}
+              onChange={(e) => setGroupId(e.target.value)}
+            >
+              <option value="">No group</option>
+              {groups?.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <label className="flex items-center justify-between gap-4 rounded-xl bg-surface px-4 py-3">
+            <span>
+              <span className="block text-[15px]">Emergency money</span>
+              <span className="block text-[13px] text-muted">
+                Counts towards the emergency fund on Home, and is left out of Allocation.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={emergency}
+              onChange={(e) => setEmergency(e.target.checked)}
+              className="h-5 w-5 shrink-0 accent-accent"
+            />
+          </label>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Platform" error={errors.platform}>
               <TextInput
@@ -157,7 +200,7 @@ function HoldingForm({ existing }: { existing: Holding | undefined }) {
             </Field>
             <Field label="Kept in" error={errors.accountId}>
               <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-                <option value="">—</option>
+                <option value="">-</option>
                 {accounts
                   ?.filter((a) => !a.archived || a.id === accountId)
                   .map((a) => (

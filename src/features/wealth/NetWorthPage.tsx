@@ -1,6 +1,15 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'wouter'
-import { CalendarGlyph, NumberGlyph, SmallButton, Table, Td, Th, Tr } from '../../components/table'
+import {
+  CalendarGlyph,
+  CellInput,
+  NumberGlyph,
+  SmallButton,
+  Table,
+  Td,
+  Th,
+  Tr,
+} from '../../components/table'
 import { Button, Card, EmptyState, Loading, Money, TextInput } from '../../components/ui'
 import {
   useAccounts,
@@ -80,11 +89,11 @@ export function NetWorthPage() {
     <WealthShell>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Net worth" hint={latest ? formatMonth(latest.month) : 'No month closed yet'}>
-          {latest ? <Money paise={latest.summary.netWorth} /> : '—'}
+          {latest ? <Money paise={latest.summary.netWorth} /> : '-'}
         </Stat>
         <Stat label="Change this month">
           {latest?.change == null ? (
-            '—'
+            '-'
           ) : (
             <Money paise={latest.change} signed className={tone(latest.change)} />
           )}
@@ -94,7 +103,7 @@ export function NetWorthPage() {
           hint={yearChange === null ? 'Needs a month a year back' : undefined}
         >
           {yearChange === null ? (
-            '—'
+            '-'
           ) : (
             <Money paise={yearChange} signed className={tone(yearChange)} />
           )}
@@ -106,7 +115,7 @@ export function NetWorthPage() {
           }
         >
           {rate.rate === null
-            ? '—'
+            ? '-'
             : rate.rate < -1
               ? 'Below −100%'
               : percent(rate.rate * 100, 0).replace('+', '')}
@@ -204,12 +213,12 @@ function CloseMonthForm({
         <Td>{BUCKET_LABELS[b]}</Td>
         <Td className="text-[13px] text-muted">{changed ? 'Changed by you' : hint(b)}</Td>
         <Td className="text-right">
-          <TextInput
+          <CellInput
             inputMode="decimal"
             aria-label={BUCKET_LABELS[b]}
             value={draft[b]}
             onChange={(e) => setDraft((d) => ({ ...d, [b]: e.target.value }))}
-            className="h-7! py-0! text-right text-[14px]"
+            className="text-right"
           />
         </Td>
         <Td className="w-16 text-right">
@@ -370,7 +379,7 @@ function History({ rows, onOpen }: { rows: SnapshotRow[]; onOpen: (month: string
               </Td>
               <Td className="text-right">
                 {r.change === null ? (
-                  '—'
+                  '-'
                 ) : (
                   <Money paise={r.change} signed className={tone(r.change)} />
                 )}

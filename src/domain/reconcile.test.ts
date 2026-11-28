@@ -293,7 +293,10 @@ describe('same amount, different payees', () => {
     const tCafe = makeTransaction({ merchant: 'Hm Irani', date: '2026-11-10', amount: 5_000 })
     const res = reconcile([swiggy, cafe], [tSwiggy, tCafe], null)
     expect(res.matched.map((m) => [m.row, m.tx])).toEqual(
-      expect.arrayContaining([[swiggy, tSwiggy], [cafe, tCafe]]),
+      expect.arrayContaining([
+        [swiggy, tSwiggy],
+        [cafe, tCafe],
+      ]),
     )
   })
 })

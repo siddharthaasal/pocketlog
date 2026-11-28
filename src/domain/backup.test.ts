@@ -80,7 +80,32 @@ describe('transactionsToCsv', () => {
     const lines = csv.replace('﻿', '').trim().split('\r\n')
     expect(lines).toHaveLength(2)
     expect(lines[1]).toBe(
-      '2026-11-02,expense,350.50,"Lunch, ""team""",,Food & Dining,HDFC Bank,,,,manual,x',
+      '2026-11-02,expense,350.50,"Lunch, ""team""",,Food & Dining,HDFC Bank,,,,manual,x,',
     )
+  })
+
+  it('lists the parts of a split and the tags', () => {
+    const csv = transactionsToCsv(
+      [
+        makeTransaction({
+          id: 's',
+          amount: 1000_00,
+          categoryId: 'cat-groceries',
+          splits: [
+            { categoryId: 'cat-groceries', amount: 600_00 },
+            { categoryId: 'cat-home', amount: 400_00 },
+          ],
+          tags: ['goa trip', 'shared'],
+        }),
+      ],
+      new Map([
+        ['cat-groceries', { name: 'Groceries' } as never],
+        ['cat-home', { name: 'Home' } as never],
+      ]),
+      new Map([['acc-hdfc', { name: 'HDFC Bank' } as never]]),
+    )
+    const line = csv.replace('﻿', '').trim().split('\r\n')[1]!
+    expect(line).toContain(',Groceries 600 + Home 400,')
+    expect(line.endsWith(',s,"goa trip, shared"')).toBe(true)
   })
 })

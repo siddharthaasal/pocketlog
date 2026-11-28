@@ -41,6 +41,7 @@ import {
 } from '../../domain/types'
 import { formatShortDate, todayISO } from '../../lib/dates'
 import { goBack } from '../../lib/navigation'
+import { parseWordList } from '../../lib/words'
 import { resolveInboxEntry } from '../../data/inbox'
 import { CategoryIcon } from '../../components/categoryIcons'
 import { MicIcon } from '../../components/icons'
@@ -86,7 +87,24 @@ interface FormState {
   loanId: string
   subscriptionId: string
   holdingId: string
+  /** Comma-separated. */
+  tags: string
+  /** Expenses only; empty when the whole amount is one category. */
+  splits: SplitDraft[]
 }
+
+interface SplitDraft {
+  key: number
+  categoryId: string
+  amount: string
+}
+
+let splitKey = 0
+const newPart = (categoryId = '', amount = ''): SplitDraft => ({
+  key: ++splitKey,
+  categoryId,
+  amount,
+})
 
 /** Handles both /add and /transactions/:id. */
 export function TransactionFormPage() {
@@ -131,6 +149,8 @@ export function TransactionFormPage() {
         loanId: existing.loanId ?? '',
         subscriptionId: existing.subscriptionId ?? '',
         holdingId: existing.holdingId ?? '',
+        tags: (existing.tags ?? []).join(', '),
+        splits: (existing.splits ?? []).map((p) => newPart(p.categoryId, paiseToInput(p.amount))),
       }
     : prefill
       ? applyParse(
@@ -198,6 +218,8 @@ function newFormState(type: TransactionType, accounts: readonly Account[]): Form
     loanId: '',
     subscriptionId: '',
     holdingId: '',
+    tags: '',
+    splits: [],
   }
 }
 
@@ -251,6 +273,7 @@ function TransactionForm({
       loanId: type === 'income' ? '' : f.loanId,
       subscriptionId: type === 'expense' ? f.subscriptionId : '',
       holdingId: type === 'transfer' ? f.holdingId : '',
+      splits: type === 'expense' ? f.splits : [],
       categoryId:
         type !== 'income' || !f.refundOf
           ? categories.find((c) => c.id === f.categoryId)?.type === type
@@ -272,11 +295,22 @@ function TransactionForm({
       setErrors({ amount: 'Enter an amount, e.g. 350 or 99.50' })
       return
     }
+    const split = form.type === 'expense' && form.splits.length > 0
+    const splits = split ? readSplits(form.splits, amount) : undefined
+    if (typeof splits === 'string') {
+      setErrors({ splits })
+      return
+    }
+    const tags = parseWordList(form.tags)
     const input: TransactionInput = {
       type: form.type,
       amount,
       description: form.description.trim(),
-      categoryId: isTransfer ? undefined : form.categoryId || undefined,
+      categoryId: isTransfer
+        ? undefined
+        : (splits?.[0]?.categoryId ?? (form.categoryId || undefined)),
+      splits,
+      tags: tags.length > 0 ? tags : undefined,
       accountId: form.accountId,
       toAccountId: isTransfer ? form.toAccountId || undefined : undefined,
       date: form.date,
@@ -314,7 +348,8 @@ function TransactionForm({
     initial.notes ||
     initial.loanId ||
     initial.subscriptionId ||
-    initial.holdingId,
+    initial.holdingId ||
+    initial.tags,
   )
 
   return (
@@ -395,7 +430,20 @@ function TransactionForm({
         />
       )}
 
-      {!isTransfer && !form.refundOf && (
+      {form.type === 'expense' && form.splits.length > 0 && (
+        <SplitEditor
+          parts={form.splits}
+          amount={parseRupees(form.amount) ?? 0}
+          categories={visibleCategories}
+          error={errors.splits ?? errors.categoryId}
+          onChange={(splits) => set('splits', splits)}
+          onCancel={() =>
+            setForm((f) => ({ ...f, categoryId: f.splits[0]?.categoryId ?? '', splits: [] }))
+          }
+        />
+      )}
+
+      {!isTransfer && !form.refundOf && form.splits.length === 0 && (
         <Field label="Category" error={errors.categoryId} group>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
             {visibleCategories.map((c) => (
@@ -416,6 +464,15 @@ function TransactionForm({
               </button>
             ))}
           </div>
+          {form.type === 'expense' && (
+            <button
+              type="button"
+              className="mt-2 px-1 text-[14px] text-accent"
+              onClick={() => set('splits', [newPart(form.categoryId, form.amount), newPart()])}
+            >
+              Split across categories
+            </button>
+          )}
         </Field>
       )}
 
@@ -481,7 +538,7 @@ function TransactionForm({
                   value={form.paymentMethod}
                   onChange={(e) => set('paymentMethod', e.target.value as PaymentMethod | '')}
                 >
-                  <option value="">—</option>
+                  <option value="">-</option>
                   {PAYMENT_METHODS.map((m) => (
                     <option key={m} value={m}>
                       {PAYMENT_METHOD_LABELS[m]}
@@ -491,6 +548,18 @@ function TransactionForm({
               </Field>
             </div>
           )}
+          <Field
+            label="Tags"
+            error={errors.tags}
+            hint="Comma-separated labels for spending across categories, e.g. goa trip, shared."
+          >
+            <TextInput
+              value={form.tags}
+              onChange={(e) => set('tags', e.target.value)}
+              placeholder="Optional"
+              autoCapitalize="none"
+            />
+          </Field>
           <TrackerLinks form={form} set={set} errors={errors} />
           <Field label="Notes" error={errors.notes}>
             <TextArea
@@ -515,6 +584,116 @@ function TransactionForm({
         )}
       </div>
     </form>
+  )
+}
+
+/** The split parts as saved, or why they can't be: each needs a category and an amount, and they must add up. */
+function readSplits(
+  parts: readonly SplitDraft[],
+  amount: number,
+): { categoryId: string; amount: number }[] | string {
+  const out: { categoryId: string; amount: number }[] = []
+  for (const p of parts) {
+    const paise = parseRupees(p.amount)
+    if (!p.categoryId) return 'Pick a category for every part'
+    if (paise === null || paise === 0) return 'Enter an amount for every part'
+    out.push({ categoryId: p.categoryId, amount: paise })
+  }
+  const sum = out.reduce((s, p) => s + p.amount, 0)
+  if (sum !== amount) {
+    return `The parts add up to ${formatINR(sum)}, not ${formatINR(amount)}`
+  }
+  return out
+}
+
+/** One payment across several categories: a row per part, and what is left to assign. */
+function SplitEditor({
+  parts,
+  amount,
+  categories,
+  error,
+  onChange,
+  onCancel,
+}: {
+  parts: SplitDraft[]
+  amount: number
+  categories: readonly Category[]
+  error: string | undefined
+  onChange: (parts: SplitDraft[]) => void
+  onCancel: () => void
+}) {
+  const assigned = parts.reduce((s, p) => s + (parseRupees(p.amount) ?? 0), 0)
+  const left = amount - assigned
+  const update = (key: number, change: Partial<SplitDraft>) =>
+    onChange(parts.map((p) => (p.key === key ? { ...p, ...change } : p)))
+
+  return (
+    <Field label="Split across categories" error={error} group>
+      <div className="space-y-2">
+        {parts.map((p, i) => (
+          <div key={p.key} className="flex gap-2">
+            <div className="min-w-0 flex-1">
+              <Select
+                aria-label={`Category for part ${i + 1}`}
+                value={p.categoryId}
+                onChange={(e) => update(p.key, { categoryId: e.target.value })}
+              >
+                <option value="">Choose…</option>
+                {categories.map((c) => (
+                  <option
+                    key={c.id}
+                    value={c.id}
+                    disabled={c.id !== p.categoryId && parts.some((x) => x.categoryId === c.id)}
+                  >
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="w-32 shrink-0">
+              <TextInput
+                inputMode="decimal"
+                aria-label={`Amount for part ${i + 1}`}
+                placeholder={left > 0 && !p.amount ? paiseToInput(left) : '0'}
+                value={p.amount}
+                onChange={(e) => update(p.key, { amount: e.target.value })}
+                className="text-right"
+              />
+            </div>
+            <Button
+              variant="ghost"
+              className="h-10 px-2 text-[14px]"
+              disabled={parts.length <= 2}
+              onClick={() => onChange(parts.filter((x) => x.key !== p.key))}
+              aria-label={`Remove part ${i + 1}`}
+            >
+              Remove
+            </Button>
+          </div>
+        ))}
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-[14px]">
+          <span className="flex gap-4">
+            <button
+              type="button"
+              className="text-accent"
+              onClick={() => onChange([...parts, newPart()])}
+            >
+              Add part
+            </button>
+            <button type="button" className="text-muted" onClick={onCancel}>
+              Don’t split
+            </button>
+          </span>
+          <span className={cx('tabular-nums', left === 0 ? 'text-muted' : 'text-negative')}>
+            {left === 0
+              ? 'Parts add up'
+              : left > 0
+                ? `${formatINR(left)} left to assign`
+                : `${formatINR(-left)} too much`}
+          </span>
+        </div>
+      </div>
+    </Field>
   )
 }
 
@@ -588,7 +767,7 @@ function TrackerLinks({
       {showLoans && (
         <Field label="Loan repayment" error={errors.loanId}>
           <Select value={form.loanId} onChange={(e) => set('loanId', e.target.value)}>
-            <option value="">—</option>
+            <option value="">-</option>
             {loans?.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name}
@@ -603,7 +782,7 @@ function TrackerLinks({
             value={form.subscriptionId}
             onChange={(e) => set('subscriptionId', e.target.value)}
           >
-            <option value="">—</option>
+            <option value="">-</option>
             {subscriptions?.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.service}
@@ -615,7 +794,7 @@ function TrackerLinks({
       {showHoldings && (
         <Field label="Invested in" error={errors.holdingId}>
           <Select value={form.holdingId} onChange={(e) => set('holdingId', e.target.value)}>
-            <option value="">—</option>
+            <option value="">-</option>
             {holdings?.map((h) => (
               <option key={h.id} value={h.id}>
                 {h.name}

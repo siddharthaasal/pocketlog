@@ -2,44 +2,48 @@ import { useMemo, useState } from 'react'
 import { Link, useLocation } from 'wouter'
 import {
   CalendarGlyph,
+  CellInput,
   NumberGlyph,
   SelectGlyph,
+  SmallButton,
   Table,
   Tag,
+  TagSelect,
   TextGlyph,
   Td,
   Th,
   Tr,
 } from '../../components/table'
-import { Button, EmptyState, Loading, Money, TextInput } from '../../components/ui'
+import { Button, EmptyState, Loading, Money } from '../../components/ui'
 import {
   useAccounts,
+  useAllocationGroups,
   useAllTransactions,
-  useBalances,
   useHoldings,
   useValuations,
 } from '../../data/hooks'
-import { saveTargets, saveValuations, useTargets } from '../../data/investments'
+import { saveAllocation, saveValuations, setHoldingGroup } from '../../data/investments'
 import {
   allocation,
+  allocationProblem,
   contributedThrough,
   growthInMonth,
   holdingCashFlows,
   holdingRows,
   investedInMonth,
+  groupTargetsTotal,
   latestValuations,
-  targetsTotal,
   totalRows,
   xirr,
+  type AllocationRow,
+  type GroupDraft,
   type HoldingRow,
-  type Targets,
 } from '../../domain/investments'
 import { paiseToInput, parseRupees } from '../../domain/money'
 import {
-  ASSET_CLASSES,
-  ASSET_CLASS_LABELS,
   HOLDING_KIND_LABELS,
   type Account,
+  type AllocationGroup,
   type Transaction,
   type Valuation,
 } from '../../domain/types'
@@ -56,8 +60,7 @@ export function InvestmentsPage() {
   const valuations = useValuations()
   const transactions = useAllTransactions()
   const accounts = useAccounts()
-  const balances = useBalances()
-  const targets = useTargets()
+  const groups = useAllocationGroups()
   const [month, setMonth] = useMonthParam()
   const [showArchived, setShowArchived] = useState(false)
 
@@ -67,7 +70,7 @@ export function InvestmentsPage() {
     [holdings, valuations, month],
   )
 
-  if (!holdings || !valuations || !transactions || !accounts || !balances || !targets) {
+  if (!holdings || !valuations || !transactions || !accounts || !groups) {
     return (
       <WealthShell>
         <Loading />
@@ -80,20 +83,26 @@ export function InvestmentsPage() {
   const totals = totalRows(active)
   const growth = growthInMonth(valuations, month)
   const putIn = investedInMonth(transactions, accountMap, month)
-  const cash = accounts
-    .filter((a) => !a.archived && ['bank', 'cash', 'wallet'].includes(a.type))
-    .reduce((sum, a) => sum + (balances.get(a.id) ?? 0), 0)
   const archivedCount = rows.length - active.length
 
   return (
     <WealthShell
       action={
-        <Link
-          href="/wealth/investments/new"
-          className="inline-flex h-9 items-center rounded-lg bg-accent px-4 text-[14px] font-medium text-accent-fg hover:opacity-90"
-        >
-          Add holding
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/wealth/investments/import"
+            className="inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 text-[14px] font-medium whitespace-nowrap hover:bg-surface-2"
+          >
+            <span className="sm:hidden">Import</span>
+            <span className="hidden sm:inline">Import from Groww</span>
+          </Link>
+          <Link
+            href="/wealth/investments/new"
+            className="inline-flex h-9 items-center rounded-lg bg-accent px-4 text-[14px] font-medium whitespace-nowrap text-accent-fg hover:opacity-90"
+          >
+            Add holding
+          </Link>
+        </div>
       }
     >
       <MonthSwitcher month={month} onChange={setMonth} as="h2" />
@@ -116,7 +125,7 @@ export function InvestmentsPage() {
               : `After ${formatMoneyShort(putIn)} put in`
           }
         >
-          {growth === null ? '—' : <Money paise={growth} signed className={gainClass(growth)} />}
+          {growth === null ? '-' : <Money paise={growth} signed className={gainClass(growth)} />}
         </Stat>
       </div>
 
@@ -137,6 +146,7 @@ export function InvestmentsPage() {
           transactions={transactions}
           accounts={accountMap}
           valuations={valuations}
+          groups={groups}
         />
       )}
       {archivedCount > 0 && (
@@ -149,7 +159,7 @@ export function InvestmentsPage() {
         </button>
       )}
 
-      <AllocationSection rows={active} cash={cash} targets={targets} />
+      <AllocationSection rows={active} groups={groups} />
     </WealthShell>
   )
 }
@@ -164,18 +174,21 @@ function HoldingsTable({
   transactions,
   accounts,
   valuations,
+  groups,
 }: {
   rows: HoldingRow[]
   month: string
   transactions: readonly Transaction[]
   accounts: ReadonlyMap<string, Account>
   valuations: readonly Valuation[]
+  groups: readonly AllocationGroup[]
 }) {
   const [, navigate] = useLocation()
   const [editing, setEditing] = useState(false)
   const [drafts, setDrafts] = useState<Record<string, { invested: string; value: string }>>({})
   const [error, setError] = useState('')
   const latest = latestValuations(valuations)
+  const groupIds = new Set(groups.map((g) => g.id))
 
   function startEditing() {
     const next: Record<string, { invested: string; value: string }> = {}
@@ -212,7 +225,7 @@ function HoldingsTable({
   }
 
   const input = (id: string, key: 'invested' | 'value') => (
-    <TextInput
+    <CellInput
       inputMode="decimal"
       aria-label={`${key === 'value' ? 'Value' : 'Invested'} for ${rows.find((r) => r.holding.id === id)?.holding.name}`}
       value={drafts[id]?.[key] ?? ''}
@@ -222,7 +235,7 @@ function HoldingsTable({
           [id]: { invested: '', value: '', ...d[id], [key]: e.target.value },
         }))
       }
-      className="h-7! py-0! text-right text-[14px]"
+      className="text-right"
     />
   )
 
@@ -265,8 +278,8 @@ function HoldingsTable({
             <Th className="w-28" icon={<SelectGlyph />}>
               Type
             </Th>
-            <Th className="w-24" icon={<SelectGlyph />}>
-              Class
+            <Th className="w-36" icon={<SelectGlyph />}>
+              Group
             </Th>
             <Th className="w-28" icon={<NumberGlyph />}>
               Invested
@@ -313,8 +326,27 @@ function HoldingsTable({
                 <Td>
                   <Tag>{HOLDING_KIND_LABELS[r.holding.kind]}</Tag>
                 </Td>
-                <Td>
-                  <Tag>{ASSET_CLASS_LABELS[r.holding.assetClass]}</Tag>
+                <Td {...(!r.holding.emergency && { onClick: (e) => e.stopPropagation() })}>
+                  {r.holding.emergency ? (
+                    <Tag title="Counts towards the emergency fund, not Allocation">
+                      Emergency money
+                    </Tag>
+                  ) : (
+                    <TagSelect
+                      aria-label={`Group for ${r.holding.name}`}
+                      value={groupIds.has(r.holding.groupId ?? '') ? r.holding.groupId : ''}
+                      onChange={(e) =>
+                        void setHoldingGroup(r.holding.id, e.target.value || undefined)
+                      }
+                    >
+                      <option value="">No group</option>
+                      {groups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                        </option>
+                      ))}
+                    </TagSelect>
+                  )}
                 </Td>
                 <Td className="text-right">
                   {edit ? input(r.holding.id, 'invested') : <Money paise={r.invested} />}
@@ -323,17 +355,17 @@ function HoldingsTable({
                   {edit ? input(r.holding.id, 'value') : <Money paise={r.value} />}
                 </Td>
                 <Td className={cx('text-right', gainClass(r.gain))}>
-                  {r.asOf ? <Money paise={r.gain} signed /> : '—'}
+                  {r.asOf ? <Money paise={r.gain} signed /> : '-'}
                 </Td>
                 <Td className={cx('text-right', r.gainPct !== null && gainClass(r.gainPct))}>
                   {percent(r.gainPct)}
                 </Td>
                 <Td className="text-right">
                   <span title="Annual return, from the transfers you tagged to this holding">
-                    {yearly === null ? '—' : percent(yearly * 100)}
+                    {yearly === null ? '-' : percent(yearly * 100)}
                   </span>
                 </Td>
-                <Td className="text-muted">{r.asOf ? shortMonth(r.asOf) : '—'}</Td>
+                <Td className="text-muted">{r.asOf ? shortMonth(r.asOf) : '-'}</Td>
               </Tr>
             )
           })}
@@ -343,32 +375,71 @@ function HoldingsTable({
   )
 }
 
-function AllocationSection({
-  rows,
-  cash,
-  targets,
-}: {
-  rows: HoldingRow[]
-  cash: number
-  targets: Targets
-}) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState<Record<string, string>>({})
-  const { rows: mix, total } = allocation(rows, cash, targets)
+interface DraftRow {
+  /** Stable React key; new rows get one before they have an id. */
+  key: string
+  id?: string
+  name: string
+  target: string
+}
 
-  const draftTargets = (): Targets | null => {
-    const next = { ...targets }
-    for (const c of ASSET_CLASSES) {
-      const n = Number(draft[c] ?? 0)
+let draftKey = 0
+const newDraftKey = () => `new-${++draftKey}`
+
+function AllocationSection({ rows, groups }: { rows: HoldingRow[]; groups: AllocationGroup[] }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<DraftRow[]>([])
+  const [error, setError] = useState('')
+  const { rows: mix, total } = allocation(rows, groups)
+  const byId = new Map(mix.filter((r) => r.group).map((r) => [r.group!.id, r]))
+  const ungrouped = mix.find((r) => r.group === null)
+  const emergency = rows.filter((r) => r.holding.emergency && r.value > 0)
+
+  const drafts = (): GroupDraft[] | null => {
+    const out: GroupDraft[] = []
+    for (const d of draft) {
+      const n = Number(d.target.trim() === '' ? 0 : d.target)
       if (!Number.isFinite(n) || n < 0 || n > 100) return null
-      next[c] = Math.round(n * 100)
+      out.push({ ...(d.id && { id: d.id }), name: d.name.trim(), target: Math.round(n * 100) })
     }
-    return next
+    return out
   }
-  const draftTotal = (() => {
-    const t = draftTargets()
-    return t ? targetsTotal(t) : null
-  })()
+  const current = drafts()
+  const draftTotal = current?.reduce((sum, d) => sum + d.target, 0) ?? null
+
+  function startEditing() {
+    setDraft(
+      groups.map((g) => ({ key: g.id, id: g.id, name: g.name, target: String(g.target / 100) })),
+    )
+    setError('')
+    setEditing(true)
+  }
+
+  async function save() {
+    const next = drafts()
+    if (!next) return setError('Enter each target as a percent from 0 to 100.')
+    const problem = allocationProblem(next)
+    if (problem) return setError(problem)
+    await saveAllocation(next)
+    setEditing(false)
+  }
+
+  const change = (key: string, field: 'name' | 'target', value: string) =>
+    setDraft((rows) => rows.map((r) => (r.key === key ? { ...r, [field]: value } : r)))
+
+  const figures = (r: AllocationRow | undefined) => (
+    <>
+      <Td className="text-right">
+        <Money paise={r?.value ?? 0} />
+      </Td>
+      <Td className="text-right">{bpsText(r?.actualBps ?? null)}</Td>
+      <Td className="text-right">
+        {r?.gapBps === null || r?.gapBps === undefined
+          ? '-'
+          : `${r.gapBps > 0 ? '+' : r.gapBps < 0 ? '−' : ''}${bpsText(Math.abs(r.gapBps))}`}
+      </Td>
+    </>
+  )
 
   return (
     <section className="space-y-2">
@@ -376,8 +447,10 @@ function AllocationSection({
         <div>
           <h2 className="text-[17px] font-semibold tracking-tight">Allocation</h2>
           <p className="text-[13px] text-muted">
-            Your mix against your targets. Savings count as cash; a class is flagged once it is 2
-            points away.
+            Your mix against your targets. Pick each holding’s group in the table above. A group is
+            flagged once it is 2 points off, or a fifth of its target if that is less.
+            {emergency.length > 0 &&
+              ` Emergency money (${emergency.map((r) => r.holding.name).join(', ')}) isn’t counted.`}
           </p>
         </div>
         {editing ? (
@@ -385,7 +458,7 @@ function AllocationSection({
             <span
               className={cx('text-[13px]', draftTotal === 10000 ? 'text-muted' : 'text-negative')}
             >
-              Total {draftTotal === null ? '—' : bpsText(draftTotal)}
+              Total {draftTotal === null ? '-' : bpsText(draftTotal)}
             </span>
             <Button
               variant="ghost"
@@ -394,34 +467,25 @@ function AllocationSection({
             >
               Cancel
             </Button>
-            <Button
-              className="h-8 px-3 text-[13.5px]"
-              disabled={draftTotal !== 10000}
-              onClick={() => {
-                const t = draftTargets()
-                if (t) void saveTargets(t).then(() => setEditing(false))
-              }}
-            >
-              Save targets
+            <Button className="h-8 px-3 text-[13.5px]" onClick={() => void save()}>
+              Save allocation
             </Button>
           </div>
         ) : (
-          <Button
-            variant="secondary"
-            className="h-8 px-3 text-[13.5px]"
-            onClick={() => {
-              setDraft(Object.fromEntries(ASSET_CLASSES.map((c) => [c, String(targets[c] / 100)])))
-              setEditing(true)
-            }}
-          >
-            Edit targets
+          <Button variant="secondary" className="h-8 px-3 text-[13.5px]" onClick={startEditing}>
+            {groups.length === 0 ? 'Add groups' : 'Edit groups'}
           </Button>
         )}
       </div>
+      {error && editing && (
+        <p role="alert" className="px-1 text-[13px] text-negative">
+          {error}
+        </p>
+      )}
       <Table minWidth={640}>
         <thead>
           <tr>
-            <Th icon={<SelectGlyph />}>Class</Th>
+            <Th icon={<TextGlyph />}>Group</Th>
             <Th className="w-24" icon={<NumberGlyph />}>
               Target
             </Th>
@@ -440,45 +504,96 @@ function AllocationSection({
           </tr>
         </thead>
         <tbody>
-          {mix.map((r) => (
-            <Tr key={r.assetClass}>
+          {editing
+            ? draft.map((d) => (
+                <Tr key={d.key}>
+                  <Td className="max-w-0">
+                    <CellInput
+                      aria-label="Group name"
+                      value={d.name}
+                      maxLength={40}
+                      placeholder="Group name"
+                      onChange={(e) => change(d.key, 'name', e.target.value)}
+                    />
+                  </Td>
+                  <Td className="text-right">
+                    <CellInput
+                      inputMode="decimal"
+                      aria-label={`Target for ${d.name || 'new group'}`}
+                      value={d.target}
+                      placeholder="0"
+                      onChange={(e) => change(d.key, 'target', e.target.value)}
+                      className="text-right"
+                    />
+                  </Td>
+                  {figures(d.id ? byId.get(d.id) : undefined)}
+                  <Td>
+                    <SmallButton
+                      tone="danger"
+                      onClick={() => setDraft((rows) => rows.filter((r) => r.key !== d.key))}
+                    >
+                      Remove
+                    </SmallButton>
+                  </Td>
+                </Tr>
+              ))
+            : mix
+                .filter((r) => r.group)
+                .map((r) => (
+                  <Tr key={r.group!.id}>
+                    <Td className="max-w-0">
+                      <Tag>{r.group!.name}</Tag>
+                    </Td>
+                    <Td className="text-right">{bpsText(r.targetBps)}</Td>
+                    {figures(r)}
+                    <Td>
+                      {r.status === 'over' && <Tag color="#e03131">Over target</Tag>}
+                      {r.status === 'under' && <Tag color="#f08c00">Under target</Tag>}
+                      {r.status === 'on' && <Tag color="#2f9e44">On target</Tag>}
+                    </Td>
+                  </Tr>
+                ))}
+          {editing && (
+            <Tr>
               <Td>
-                <Tag>{ASSET_CLASS_LABELS[r.assetClass]}</Tag>
+                <SmallButton
+                  onClick={() =>
+                    setDraft((rows) => [...rows, { key: newDraftKey(), name: '', target: '' }])
+                  }
+                >
+                  + Add group
+                </SmallButton>
               </Td>
-              <Td className="text-right">
-                {editing ? (
-                  <TextInput
-                    inputMode="decimal"
-                    aria-label={`Target for ${ASSET_CLASS_LABELS[r.assetClass]}`}
-                    value={draft[r.assetClass] ?? ''}
-                    onChange={(e) => setDraft((d) => ({ ...d, [r.assetClass]: e.target.value }))}
-                    className="h-7! py-0! text-right text-[14px]"
-                  />
-                ) : (
-                  bpsText(r.targetBps)
-                )}
-              </Td>
-              <Td className="text-right">
-                <Money paise={r.value} />
-              </Td>
-              <Td className="text-right">{bpsText(r.actualBps)}</Td>
-              <Td className="text-right">
-                {r.gapBps === null
-                  ? '—'
-                  : `${r.gapBps > 0 ? '+' : r.gapBps < 0 ? '−' : ''}${bpsText(Math.abs(r.gapBps))}`}
-              </Td>
-              <Td>
-                {r.status === 'over' && <Tag color="#e03131">Over target</Tag>}
-                {r.status === 'under' && <Tag color="#f08c00">Under target</Tag>}
-                {r.status === 'on' && (r.targetBps > 0 || r.value > 0) && (
-                  <Tag color="#2f9e44">On target</Tag>
-                )}
-              </Td>
+              <Td />
+              <Td />
+              <Td />
+              <Td />
+              <Td />
             </Tr>
-          ))}
+          )}
+          {!editing && groups.length === 0 && (
+            <Tr>
+              <Td className="text-muted">
+                No groups yet. Add one per fund or theme, like Nifty 50 or Gold.
+              </Td>
+              <Td />
+              <Td />
+              <Td />
+              <Td />
+              <Td />
+            </Tr>
+          )}
+          {ungrouped && (
+            <Tr>
+              <Td className="text-muted">No group</Td>
+              <Td className="text-right text-muted">-</Td>
+              {figures(ungrouped)}
+              <Td />
+            </Tr>
+          )}
           <Tr>
             <Td className="font-medium">Total</Td>
-            <Td className="text-right text-muted">{bpsText(targetsTotal(targets))}</Td>
+            <Td className="text-right text-muted">{bpsText(groupTargetsTotal(groups))}</Td>
             <Td className="text-right font-medium">
               <Money paise={total} />
             </Td>

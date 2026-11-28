@@ -14,6 +14,7 @@ const HEADER = [
   'Notes',
   'Source',
   'ID',
+  'Tags',
 ]
 
 function cell(value: string): string {
@@ -35,13 +36,20 @@ export function transactionsToCsv(
       paiseToInput(t.amount),
       t.description,
       t.merchant ?? '',
-      t.categoryId ? (categories.get(t.categoryId)?.name ?? '') : '',
+      t.splits
+        ? t.splits
+            .map((p) => `${categories.get(p.categoryId)?.name ?? '?'} ${paiseToInput(p.amount)}`)
+            .join(' + ')
+        : t.categoryId
+          ? (categories.get(t.categoryId)?.name ?? '')
+          : '',
       accounts.get(t.accountId)?.name ?? '',
       t.toAccountId ? (accounts.get(t.toAccountId)?.name ?? '') : '',
       t.paymentMethod ? PAYMENT_METHOD_LABELS[t.paymentMethod] : '',
       t.notes ?? '',
       t.source,
       t.id,
+      (t.tags ?? []).join(', '),
     ])
   return '﻿' + [HEADER, ...rows].map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n'
 }

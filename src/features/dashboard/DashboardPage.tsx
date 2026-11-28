@@ -9,6 +9,8 @@ import { summarize } from '../../domain/summary'
 import { formatMonth } from '../../lib/dates'
 import { MonthSwitcher } from '../shared/MonthSwitcher'
 import { BackupReminder } from './BackupReminder'
+import { BudgetSummary } from './BudgetSummary'
+import { EmergencyFund } from './EmergencyFund'
 import { WealthSummary } from './WealthSummary'
 import { useMonthParam } from '../shared/useMonthParam'
 import { TransactionRow } from '../transactions/TransactionRow'
@@ -43,6 +45,12 @@ export function DashboardPage() {
             </div>
           </Card>
 
+          <BudgetSummary
+            month={month}
+            categories={[...lookups.categories.values()]}
+            spending={summary.expenseByCategory}
+          />
+
           <Link
             href="/inbox"
             className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 hover:bg-surface-2/60"
@@ -71,6 +79,8 @@ export function DashboardPage() {
               </span>
             </Link>
           )}
+
+          <EmergencyFund />
 
           <WealthSummary />
 

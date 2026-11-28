@@ -1,4 +1,5 @@
 import {
+  allocationGroupSchema,
   DEFAULT_ASSET_CLASS,
   holdingSchema,
   valuationSchema,
@@ -6,15 +7,26 @@ import {
   type HoldingKind,
   type Valuation,
 } from '../domain/types'
-import { DEFAULT_TARGETS, type Targets } from '../domain/investments'
+import { allocationProblem, type GroupDraft } from '../domain/investments'
+import { ValidationError } from '../domain/errors'
 import { db } from './db'
-import { useMeta } from './hooks'
 import { monthRowId, removeRecord, saveRecord } from './records'
 
-const TARGETS_KEY = 'allocation.targets'
-
 export type HoldingInput = Pick<Holding, 'name' | 'kind' | 'assetClass'> &
-  Partial<Pick<Holding, 'platform' | 'accountId' | 'interestRate' | 'maturityDate' | 'notes'>>
+  Partial<
+    Pick<
+      Holding,
+      | 'platform'
+      | 'accountId'
+      | 'groupId'
+      | 'emergency'
+      | 'isin'
+      | 'folio'
+      | 'interestRate'
+      | 'maturityDate'
+      | 'notes'
+    >
+  >
 
 /** Pass `id` to edit. New holdings start active. */
 export function saveHolding(input: HoldingInput, id?: string): Promise<Holding> {
@@ -23,6 +35,11 @@ export function saveHolding(input: HoldingInput, id?: string): Promise<Holding> 
 
 export function setHoldingArchived(id: string, archived: boolean): Promise<Holding> {
   return saveRecord(db.holdings, holdingSchema, { archived }, id)
+}
+
+/** Moves a holding into an allocation group, or out of every group with `undefined`. */
+export function setHoldingGroup(id: string, groupId: string | undefined): Promise<Holding> {
+  return saveRecord(db.holdings, holdingSchema, { groupId }, id)
 }
 
 export const defaultAssetClass = (kind: HoldingKind) => DEFAULT_ASSET_CLASS[kind]
@@ -56,12 +73,25 @@ export function deleteValuation(id: string): Promise<void> {
   return removeRecord(db.valuations, id)
 }
 
-export async function saveTargets(targets: Targets): Promise<void> {
-  await db.meta.put({ key: TARGETS_KEY, value: targets })
-}
-
-/** Target mix in basis points, with defaults for anything not set. */
-export function useTargets(): Targets | undefined {
-  const meta = useMeta<Partial<Targets>>(TARGETS_KEY)
-  return meta ? { ...DEFAULT_TARGETS, ...meta.value } : undefined
+/**
+ * Saves the Allocation table as edited: groups in this order, new ones added, and any group
+ * left out deleted. Holdings in a deleted group fall back to "No group".
+ */
+export async function saveAllocation(drafts: readonly GroupDraft[]): Promise<void> {
+  const problem = allocationProblem(drafts)
+  if (problem) throw new ValidationError({ form: problem })
+  await db.transaction('rw', db.allocationGroups, async () => {
+    const kept = new Set(drafts.map((d) => d.id))
+    for (const g of await db.allocationGroups.toArray()) {
+      if (!g.deletedAt && !kept.has(g.id)) await removeRecord(db.allocationGroups, g.id)
+    }
+    for (const [order, d] of drafts.entries()) {
+      await saveRecord(
+        db.allocationGroups,
+        allocationGroupSchema,
+        { name: d.name, target: d.target, order },
+        d.id,
+      )
+    }
+  })
 }

@@ -1,5 +1,6 @@
 import { looksLikeEmailSweep, parseEmailSweep, type ParsedEmailSweep } from '../parser/emailSweep'
 import { parseCsv, parseStatementGrid, type ParsedStatement } from '../parser/statement'
+import { readSheetGrid } from './spreadsheet'
 
 export type ReconcileFile =
   { kind: 'bank'; statement: ParsedStatement } | { kind: 'email'; sweep: ParsedEmailSweep }
@@ -8,8 +9,7 @@ export type ReconcileFileResult = { ok: true; file: ReconcileFile } | { ok: fals
 
 /**
  * Reads a file dropped on the Reconcile screen: a bank statement, or the text file the email
- * sweep writes. Spreadsheets (.xls/.xlsx) go through SheetJS, which is loaded only when one is
- * actually opened so it never weighs down the rest of the app.
+ * sweep writes. Spreadsheets (.xls/.xlsx) go through SheetJS (`readSheetGrid`).
  */
 export async function readReconcileFile(file: File): Promise<ReconcileFileResult> {
   try {
@@ -26,16 +26,8 @@ export async function readReconcileFile(file: File): Promise<ReconcileFileResult
         ? { ok: true, file: { kind: 'bank', statement: result.statement } }
         : { ok: false, message: result.message }
     }
-    const XLSX = await import('xlsx')
-    const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
-    const sheet = workbook.Sheets[workbook.SheetNames[0]!]
-    if (!sheet) return { ok: false, message: 'This file has no sheets.' }
-    const grid = XLSX.utils.sheet_to_json<string[]>(sheet, {
-      header: 1,
-      raw: false,
-      defval: '',
-      blankrows: false,
-    })
+    const grid = await readSheetGrid(file, false)
+    if (!grid) return { ok: false, message: 'This file has no sheets.' }
     const result = parseStatementGrid(grid)
     return result.ok
       ? { ok: true, file: { kind: 'bank', statement: result.statement } }

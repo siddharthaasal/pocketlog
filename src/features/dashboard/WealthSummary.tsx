@@ -15,7 +15,8 @@ import {
   useValuations,
 } from '../../data/hooks'
 import { findDrift } from '../../domain/balances'
-import { allocation, DEFAULT_TARGETS, holdingRows } from '../../domain/investments'
+import { savingsBalance } from '../../domain/budgets'
+import { classShareBps, holdingRows } from '../../domain/investments'
 import { changeOver, savingsRate, snapshotRows } from '../../domain/networth'
 import { perYear, renewalState } from '../../domain/recurring'
 import { cx } from '../../lib/cx'
@@ -65,11 +66,7 @@ export function WealthSummary() {
     const rate = savingsRate(transactions, currentMonth(), 12)
 
     const active = holdingRows(holdings, valuations).filter((r) => !r.holding.archived && r.asOf)
-    const cash = accounts
-      .filter((a) => !a.archived && ['bank', 'cash', 'wallet'].includes(a.type))
-      .reduce((sum, a) => sum + (balances.get(a.id) ?? 0), 0)
-    const mix = allocation(active, cash, DEFAULT_TARGETS)
-    const equity = mix.rows.find((r) => r.assetClass === 'equity')?.actualBps ?? null
+    const equity = classShareBps(active, savingsBalance(accounts, balances), 'equity')
 
     const coming: Coming[] = [
       ...subscriptions
@@ -160,7 +157,7 @@ export function WealthSummary() {
           Net worth{latest ? ` · ${formatMonth(latest.month)}` : ''}
         </div>
         <div className="mt-1 text-[32px] leading-none font-semibold tracking-tight">
-          {latest ? <Money paise={latest.summary.netWorth} /> : '—'}
+          {latest ? <Money paise={latest.summary.netWorth} /> : '-'}
         </div>
         {!latest && (
           <Link href="/wealth/net-worth" className="mt-2 inline-block text-[14px] text-accent">
@@ -170,27 +167,27 @@ export function WealthSummary() {
         <div className="mt-5 grid grid-cols-2 gap-4 border-t border-border pt-4 sm:grid-cols-4">
           <Figure label="This month">
             {latest?.change == null ? (
-              '—'
+              '-'
             ) : (
               <Money paise={latest.change} signed className={tone(latest.change)} />
             )}
           </Figure>
           <Figure label="12 months">
             {view.year === null ? (
-              '—'
+              '-'
             ) : (
               <Money paise={view.year} signed className={tone(view.year)} />
             )}
           </Figure>
           <Figure label="Savings rate">
             {view.rate.rate === null
-              ? '—'
+              ? '-'
               : view.rate.rate < -1
                 ? 'Below −100%'
                 : `${Math.round(view.rate.rate * 100)}%`}
           </Figure>
           <Figure label="In equity">
-            {view.equity === null ? '—' : `${Math.round(view.equity / 100)}%`}
+            {view.equity === null ? '-' : `${Math.round(view.equity / 100)}%`}
           </Figure>
         </div>
 
@@ -211,7 +208,7 @@ export function WealthSummary() {
               </div>
             ))}
             {view.drift > 0 && (
-              <Link href="/settings/accounts" className="block text-[14px] text-negative">
+              <Link href="/accounts" className="block text-[14px] text-negative">
                 {view.drift === 1 ? '1 account differs' : `${view.drift} accounts differ`} from the
                 bank statement
               </Link>
