@@ -43,7 +43,7 @@ function CategoryTag({ t, categories }: { t: Transaction; categories: readonly C
   const c = categories.find((x) => x.id === t.categoryId)
   return (
     <Tag color={c?.color}>
-      <CategoryIcon icon={c?.icon ?? 'tag'} size={13} className="inline" /> {c?.name ?? '—'}
+      <CategoryIcon icon={c?.icon ?? 'tag'} size={13} className="inline" /> {c?.name ?? '-'}
     </Tag>
   )
 }
@@ -285,7 +285,7 @@ export function ExtraList({
           {extra.map((t) => (
             <Tr key={t.id}>
               <Td className="text-muted">{formatShortDate(t.date)}</Td>
-              <Td className="max-w-0">{t.description || t.merchant || '—'}</Td>
+              <Td className="max-w-0">{t.description || t.merchant || '-'}</Td>
               <Td className={num}>
                 <Money paise={signed(t)} />
               </Td>

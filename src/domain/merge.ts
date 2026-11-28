@@ -80,7 +80,8 @@ export function planMerge(local: BackupData, incoming: BackupData): MergePlan {
     const missing =
       !accountIds.has(t.accountId) ||
       (t.toAccountId !== undefined && !accountIds.has(t.toAccountId)) ||
-      (t.categoryId !== undefined && !categoryIds.has(t.categoryId))
+      (t.categoryId !== undefined && !categoryIds.has(t.categoryId)) ||
+      (t.splits ?? []).some((p) => !categoryIds.has(p.categoryId))
     if (missing && !t.deletedAt) {
       invalid.push({
         table: 'transactions',

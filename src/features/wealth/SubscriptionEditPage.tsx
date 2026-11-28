@@ -158,7 +158,7 @@ function SubscriptionForm({ existing }: { existing: Subscription | undefined }) 
             </Field>
             <Field label="Paid with" error={errors.accountId}>
               <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-                <option value="">—</option>
+                <option value="">-</option>
                 {accounts
                   ?.filter((a) => !a.archived || a.id === accountId)
                   .map((a) => (

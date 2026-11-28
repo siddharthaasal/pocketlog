@@ -1,9 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useMemo } from 'react'
 import { accountBalances } from '../domain/balances'
+import { liveGroups } from '../domain/investments'
 import type {
   Account,
   AccountBalance,
+  AllocationGroup,
   Category,
   Holding,
   InboxEntry,
@@ -120,6 +122,11 @@ export function useHoldings(): Holding[] | undefined {
 
 export function useValuations(): Valuation[] | undefined {
   return useLiveQuery(async () => alive(await db.valuations.toArray()))
+}
+
+/** In table order. */
+export function useAllocationGroups(): AllocationGroup[] | undefined {
+  return useLiveQuery(async () => liveGroups(await db.allocationGroups.toArray()))
 }
 
 export function useLoans(): Loan[] | undefined {

@@ -3,6 +3,7 @@ import { decryptText, DecryptionError, encryptText, type EncryptedPayload } from
 import {
   accountBalanceSchema,
   accountSchema,
+  allocationGroupSchema,
   categorySchema,
   holdingSchema,
   inboxEntrySchema,
@@ -15,6 +16,7 @@ import {
   valuationSchema,
   type Account,
   type AccountBalance,
+  type AllocationGroup,
   type Category,
   type Holding,
   type InboxEntry,
@@ -29,9 +31,10 @@ import {
 
 /**
  * Bump when the file layout changes; older apps refuse newer files instead of guessing.
- * 2 added the finance tracker tables. Format 1 files still import, with those tables empty.
+ * 2 added the finance tracker tables, 3 the allocation groups. Older files still import, with
+ * the tables they lack empty.
  */
-export const BACKUP_FORMAT = 2
+export const BACKUP_FORMAT = 3
 
 export interface BackupData {
   transactions: Transaction[]
@@ -46,6 +49,7 @@ export interface BackupData {
   policies: Policy[]
   accountBalances: AccountBalance[]
   snapshots: NetWorthSnapshot[]
+  allocationGroups: AllocationGroup[]
 }
 
 /** Tables whose rows are versioned records that merge last-writer-wins by `updatedAt`. */
@@ -61,6 +65,7 @@ export const VERSIONED_TABLES = [
   'policies',
   'accountBalances',
   'snapshots',
+  'allocationGroups',
 ] as const satisfies readonly (keyof BackupData)[]
 
 export const emptyBackupData = (): BackupData => ({
@@ -76,12 +81,15 @@ export const emptyBackupData = (): BackupData => ({
   policies: [],
   accountBalances: [],
   snapshots: [],
+  allocationGroups: [],
 })
 
 export interface BackupFile {
   app: 'pocketlog'
   format: number
   exportedAt: string
+  /** The kind of device that made it, e.g. "Mac". Older files don't say. */
+  device?: string
   data: BackupData
 }
 
@@ -111,12 +119,14 @@ const ROW_SCHEMAS = {
   policies: policySchema,
   accountBalances: accountBalanceSchema,
   snapshots: netWorthSnapshotSchema,
+  allocationGroups: allocationGroupSchema,
 } as const
 
 const envelopeSchema = z.object({
   app: z.literal('pocketlog'),
   format: z.number().int().positive(),
   exportedAt: z.string().optional(),
+  device: z.string().max(40).optional(),
   data: z.record(z.string(), z.unknown()).optional(),
   encrypted: z
     .object({
@@ -129,8 +139,8 @@ const envelopeSchema = z.object({
     .optional(),
 })
 
-export function createBackup(data: BackupData, exportedAt: string): BackupFile {
-  return { app: 'pocketlog', format: BACKUP_FORMAT, exportedAt, data }
+export function createBackup(data: BackupData, exportedAt: string, device?: string): BackupFile {
+  return { app: 'pocketlog', format: BACKUP_FORMAT, exportedAt, ...(device && { device }), data }
 }
 
 /** Plain JSON, or an envelope whose `encrypted` payload holds that JSON. */
@@ -211,6 +221,7 @@ export async function readBackupText(text: string, passphrase?: string): Promise
       app: 'pocketlog',
       format: parsed.data.format,
       exportedAt: parsed.data.exportedAt ?? '',
+      ...(parsed.data.device && { device: parsed.data.device }),
       data,
     },
     invalid,

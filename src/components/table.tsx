@@ -131,6 +131,22 @@ export function TagSelect({
   )
 }
 
+/**
+ * A text field that is part of the cell: no box or fill until it has focus, like editing in
+ * Notion. Phones keep the global 16px so iOS doesn't zoom in; wider screens match the table.
+ */
+export function CellInput({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={cx(
+        '-mx-1 block w-[calc(100%+0.5rem)] rounded bg-transparent px-1 py-0.5 outline-none md:text-[14px]! placeholder:text-muted focus:bg-bg focus:ring-2 focus:ring-accent',
+        className,
+      )}
+    />
+  )
+}
+
 export function SmallButton({
   tone = 'plain',
   ...props

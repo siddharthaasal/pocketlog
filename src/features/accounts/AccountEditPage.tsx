@@ -32,7 +32,7 @@ export function AccountEditPage() {
   if (id !== 'new' && !existing) {
     return (
       <>
-        <PageHeader title="Account" back="/settings/accounts" />
+        <PageHeader title="Account" back="/accounts" />
         <p className="text-muted">Account not found.</p>
       </>
     )
@@ -68,7 +68,7 @@ function AccountForm({ existing }: { existing: Account | undefined }) {
   async function run(action: () => Promise<unknown>) {
     try {
       await action()
-      goBack(navigate, '/settings/accounts')
+      goBack(navigate, '/accounts')
     } catch (error) {
       setErrors(toFieldErrors(error) ?? { form: (error as Error).message })
     }
@@ -108,7 +108,7 @@ function AccountForm({ existing }: { existing: Account | undefined }) {
 
   return (
     <>
-      <PageHeader title={existing ? 'Edit account' : 'New account'} back="/settings/accounts" />
+      <PageHeader title={existing ? 'Edit account' : 'New account'} back="/accounts" />
       <form onSubmit={onSubmit} className="space-y-5" noValidate>
         <Field label="Name" error={errors.name}>
           <TextInput value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />

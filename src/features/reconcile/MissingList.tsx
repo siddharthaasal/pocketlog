@@ -14,6 +14,7 @@ import {
 } from './plan'
 import {
   CalendarGlyph,
+  CellInput,
   NumberGlyph,
   SelectGlyph,
   SmallButton,
@@ -185,10 +186,9 @@ export function MissingList({ items, transactions, categories, accounts, layer =
                 </Td>
                 <Td className="whitespace-nowrap text-muted">{formatShortDate(row.date)}</Td>
                 <Td className="max-w-0">
-                  <input
+                  <CellInput
                     aria-label="Description"
                     title={row.narration}
-                    className="-mx-1 block w-[calc(100%+0.5rem)] rounded px-1 py-0.5 text-[14px] outline-none focus:bg-bg focus:ring-2 focus:ring-accent"
                     value={draft.description}
                     onChange={(e) =>
                       setOverrides((cur) => ({
@@ -209,7 +209,7 @@ export function MissingList({ items, transactions, categories, accounts, layer =
                     {draft.needsReview && !item.pair && (
                       <span
                         className="h-2 w-2 shrink-0 rounded-full bg-amber-500"
-                        title="Guessed — will be added for review"
+                        title="Guessed - will be added for review"
                       />
                     )}
                     <TagSelect

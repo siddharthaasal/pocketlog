@@ -15,6 +15,7 @@ import { useCategories } from '../../data/hooks'
 import { addCategory, updateCategory } from '../../data/repo'
 import { toFieldErrors } from '../../domain/errors'
 import type { Category, CategoryType } from '../../domain/types'
+import { paiseToInput, parseRupees } from '../../domain/money'
 import { goBack } from '../../lib/navigation'
 import { parseWordList } from '../../lib/words'
 
@@ -68,6 +69,7 @@ function CategoryForm({
   const [icon, setIcon] = useState(existing?.icon ?? 'package')
   const [color, setColor] = useState(existing?.color ?? COLORS[0]!)
   const [keywords, setKeywords] = useState(existing?.keywords.join(', ') ?? '')
+  const [budget, setBudget] = useState(existing?.budget ? paiseToInput(existing.budget) : '')
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const back = `/settings/categories?type=${type}`
@@ -83,7 +85,18 @@ function CategoryForm({
 
   function onSubmit(e: FormEvent) {
     e.preventDefault()
-    const fields = { name, icon, color, keywords: parseWordList(keywords) }
+    const limit = budget.trim() === '' ? 0 : parseRupees(budget)
+    if (limit === null) {
+      setErrors({ budget: 'Enter an amount like 5000, or leave it empty' })
+      return
+    }
+    const fields = {
+      name,
+      icon,
+      color,
+      keywords: parseWordList(keywords),
+      budget: type === 'expense' && limit > 0 ? limit : undefined,
+    }
     void run(() =>
       existing ? updateCategory(existing.id, fields) : addCategory({ ...fields, type }),
     )
@@ -147,6 +160,21 @@ function CategoryForm({
             ))}
           </div>
         </Field>
+
+        {type === 'expense' && (
+          <Field
+            label="Monthly budget"
+            error={errors.budget}
+            hint="Optional. Home warns you at 80% and once you go over."
+          >
+            <TextInput
+              inputMode="decimal"
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              placeholder="No budget"
+            />
+          </Field>
+        )}
 
         <Field
           label="Siri keywords"

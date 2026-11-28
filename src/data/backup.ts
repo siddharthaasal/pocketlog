@@ -1,11 +1,22 @@
 import { extraDefaults } from '../domain/accounts'
-import { createBackup, serializeBackup, type BackupData } from '../domain/backup'
+import { createBackup, serializeBackup, type BackupData, type BackupFile } from '../domain/backup'
 import { transactionsToCsv } from '../domain/csv'
 import { planMerge, type MergePlan } from '../domain/merge'
+import { deviceName } from '../lib/device'
 import { nowISO } from '../lib/ids'
 import { db } from './db'
 
 export const LAST_BACKUP_KEY = 'lastBackupAt'
+export const LAST_SYNC_KEY = 'lastSyncAt'
+
+/** The last time a file from another device (or a backup) was merged in. */
+export interface LastSync {
+  /** When it was merged here. */
+  at: string
+  /** When the file was made, and on what kind of device, when the file says. */
+  exportedAt?: string
+  from?: string
+}
 
 /** Everything, including deleted rows, so deletions reach the other device. */
 export async function collectData(): Promise<BackupData> {
@@ -22,6 +33,7 @@ export async function collectData(): Promise<BackupData> {
     policies,
     accountBalances,
     snapshots,
+    allocationGroups,
   ] = await Promise.all(TABLES().map((table) => table.toArray()))
   return {
     transactions,
@@ -36,11 +48,12 @@ export async function collectData(): Promise<BackupData> {
     policies,
     accountBalances,
     snapshots,
+    allocationGroups,
   } as BackupData
 }
 
 export async function exportBackupText(passphrase?: string): Promise<string> {
-  return serializeBackup(createBackup(await collectData(), nowISO()), passphrase)
+  return serializeBackup(createBackup(await collectData(), nowISO(), deviceName()), passphrase)
 }
 
 export async function exportCsvText(): Promise<string> {
@@ -72,6 +85,7 @@ const TABLES = () =>
     db.policies,
     db.accountBalances,
     db.snapshots,
+    db.allocationGroups,
   ] as const
 
 const ALL_TABLES = TABLES
@@ -91,6 +105,7 @@ async function writeAll(data: BackupData): Promise<void> {
     data.policies,
     data.accountBalances,
     data.snapshots,
+    data.allocationGroups,
   ]
   for (const [i, table] of rows.entries()) {
     await (table as { bulkPut(rows: unknown[]): Promise<unknown> }).bulkPut(values[i] ?? [])
@@ -102,6 +117,15 @@ async function clearExtraDefaults(): Promise<void> {
   for (const account of extraDefaults(await db.accounts.toArray())) {
     await db.accounts.update(account.id, { isDefault: false, updatedAt: now })
   }
+}
+
+export async function recordSync(file: Pick<BackupFile, 'exportedAt' | 'device'>): Promise<void> {
+  const value: LastSync = {
+    at: nowISO(),
+    ...(file.exportedAt && { exportedAt: file.exportedAt }),
+    ...(file.device && { from: file.device }),
+  }
+  await db.meta.put({ key: LAST_SYNC_KEY, value })
 }
 
 /** What a merge would do, for the preview. */

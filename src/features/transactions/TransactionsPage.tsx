@@ -1,4 +1,4 @@
-import type { ReactNode, SelectHTMLAttributes } from 'react'
+import { useState, type ReactNode, type SelectHTMLAttributes } from 'react'
 import { Link, useSearchParams } from 'wouter'
 import {
   Card,
@@ -22,6 +22,7 @@ import { TRANSACTION_TYPES, type Transaction, type TransactionType } from '../..
 import { cx } from '../../lib/cx'
 import { currentMonth, formatDayHeading, monthBounds, shiftMonth, todayISO } from '../../lib/dates'
 import { TransactionRow } from './TransactionRow'
+import { BulkBar } from './BulkBar'
 import { TransactionsTable } from './TransactionsTable'
 
 const PERIODS = {
@@ -114,19 +115,22 @@ function useFilterParams() {
       ? (type as TransactionType)
       : undefined,
     categoryId: get('category') || undefined,
+    tag: get('tag') || undefined,
     accountId: get('account') || undefined,
     from,
     to,
   }
   const active =
-    Boolean(filters.query || filters.type || filters.categoryId || filters.accountId) ||
-    period !== 'all'
+    Boolean(
+      filters.query || filters.type || filters.categoryId || filters.tag || filters.accountId,
+    ) || period !== 'all'
 
   return {
     raw: {
       q: get('q'),
       type,
       category: get('category'),
+      tag: get('tag'),
       account: get('account'),
       from: get('from'),
       to: get('to'),
@@ -152,6 +156,20 @@ export function TransactionsPage() {
 
   const categories = lookups ? [...lookups.categories.values()] : []
   const accounts = lookups ? [...lookups.accounts.values()] : []
+  const allTags = [...new Set((transactions ?? []).flatMap((t) => t.tags ?? []))].sort()
+
+  // Ticked rows of the table; only those still shown count, so filtering never hides a change.
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set())
+  const selected = results.filter((t) => ticked.has(t.id))
+  const select = (ids: readonly string[], on: boolean) =>
+    setTicked((cur) => {
+      const next = new Set(cur)
+      for (const id of ids) {
+        if (on) next.add(id)
+        else next.delete(id)
+      }
+      return next
+    })
 
   return (
     <>
@@ -160,7 +178,7 @@ export function TransactionsPage() {
       <div className="mb-5 space-y-3">
         <TextInput
           type="search"
-          placeholder="Search description, merchant, notes"
+          placeholder="Search description, merchant, notes, tags"
           value={f.raw.q}
           onChange={(e) => f.set('q', e.target.value)}
           aria-label="Search transactions"
@@ -204,6 +222,21 @@ export function TransactionsPage() {
               </optgroup>
             ))}
           </Chip>
+          {allTags.length > 0 && (
+            <Chip
+              aria-label="Tag"
+              value={f.raw.tag}
+              active={Boolean(f.filters.tag)}
+              onChange={(e) => f.set('tag', e.target.value)}
+            >
+              <option value="">All tags</option>
+              {allTags.map((t) => (
+                <option key={t} value={t}>
+                  #{t}
+                </option>
+              ))}
+            </Chip>
+          )}
           <Chip
             aria-label="Account"
             value={f.raw.account}
@@ -304,7 +337,15 @@ export function TransactionsPage() {
       ) : (
         <>
           <div className="hidden md:block">
-            <TransactionsTable transactions={results} lookups={lookups} />
+            {selected.length > 0 && (
+              <BulkBar selected={selected} lookups={lookups} onDone={() => setTicked(new Set())} />
+            )}
+            <TransactionsTable
+              transactions={results}
+              lookups={lookups}
+              selected={ticked}
+              onSelect={select}
+            />
           </div>
           <div className="md:hidden">
             {byDate ? (

@@ -38,3 +38,17 @@ export function useInvestedBefore(): number | undefined {
   const meta = useMeta<number>(INVESTED_BEFORE_KEY)
   return meta ? (meta.value ?? 0) : undefined
 }
+
+const EMERGENCY_TARGET_KEY = 'emergency.targetMonths'
+export const EMERGENCY_TARGET_OPTIONS = [3, 6, 12] as const
+export type EmergencyTarget = (typeof EMERGENCY_TARGET_OPTIONS)[number]
+
+/** How many months of spending you want your savings to cover. */
+export async function saveEmergencyTarget(months: EmergencyTarget): Promise<void> {
+  await db.meta.put({ key: EMERGENCY_TARGET_KEY, value: months })
+}
+
+export function useEmergencyTarget(): EmergencyTarget | undefined {
+  const meta = useMeta<EmergencyTarget>(EMERGENCY_TARGET_KEY)
+  return meta ? (meta.value ?? 6) : undefined
+}

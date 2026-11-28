@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { makeAccount, makeTransfer } from '../test/factories'
 import {
   allocation,
+  allocationProblem,
+  classShareBps,
   contributedThrough,
-  DEFAULT_TARGETS,
+  groupsFromClassTargets,
   growthInMonth,
   holdingCashFlows,
   holdingRows,
@@ -13,7 +15,7 @@ import {
   totalRows,
   xirr,
 } from './investments'
-import type { Holding, Valuation } from './types'
+import type { AllocationGroup, Holding, Valuation } from './types'
 
 const STAMP = '2026-11-01T00:00:00.000Z'
 const holding = (id: string, assetClass: Holding['assetClass'], extra: Partial<Holding> = {}) =>
@@ -70,38 +72,137 @@ describe('holding rows', () => {
   })
 })
 
+const group = (id: string, target: number, order: number, extra: Partial<AllocationGroup> = {}) =>
+  ({ id, name: id, target, order, createdAt: STAMP, updatedAt: STAMP, ...extra }) as AllocationGroup
+
 describe('allocation', () => {
-  it('compares the actual mix with targets and flags big gaps', () => {
+  it('compares each group with its target and flags big gaps', () => {
     const rows = holdingRows(
-      [holding('fund', 'equity'), holding('fd', 'debt'), holding('gold', 'gold')],
       [
-        val('fund', '2026-11', 0, 80_000_00),
-        val('fd', '2026-11', 0, 10_000_00),
-        val('gold', '2026-11', 0, 10_000_00),
+        holding('nifty', 'equity', { groupId: 'india' }),
+        holding('sp500', 'equity', { groupId: 'us' }),
+        holding('sgb', 'gold', { groupId: 'gold' }),
+        holding('etf', 'gold', { groupId: 'gold' }),
+      ],
+      [
+        val('nifty', '2026-11', 0, 60_000_00),
+        val('sp500', '2026-11', 0, 21_000_00),
+        val('sgb', '2026-11', 0, 10_000_00),
+        val('etf', '2026-11', 0, 9_000_00),
       ],
     )
-    const { rows: mix, total } = allocation(rows, 0, DEFAULT_TARGETS)
+    const groups = [group('us', 2500, 1), group('india', 5500, 0), group('gold', 2000, 2)]
+    const { rows: mix, total } = allocation(rows, groups)
     expect(total).toBe(100_000_00)
-    const by = Object.fromEntries(mix.map((r) => [r.assetClass, r]))
-    expect(by.equity).toMatchObject({ actualBps: 8000, targetBps: 6000, status: 'over' })
-    expect(by.debt).toMatchObject({ actualBps: 1000, status: 'under' })
-    expect(by.gold).toMatchObject({ actualBps: 1000, status: 'on' })
-    expect(by.cash).toMatchObject({ actualBps: 0, status: 'under' })
+    expect(mix.map((r) => r.group?.id)).toEqual(['india', 'us', 'gold'])
+    expect(mix[0]).toMatchObject({ actualBps: 6000, gapBps: 500, status: 'over' })
+    expect(mix[1]).toMatchObject({ actualBps: 2100, gapBps: -400, status: 'under' })
+    expect(mix[2]).toMatchObject({ value: 19_000_00, actualBps: 1900, status: 'on' })
   })
 
+  it('flags small targets sooner, and any money in a 0% group', () => {
+    const rows = holdingRows(
+      [
+        holding('main', 'equity', { groupId: 'main' }),
+        holding('silver', 'other', { groupId: 'silver' }),
+        holding('old', 'other', { groupId: 'zero' }),
+      ],
+      [
+        val('main', '2026-11', 0, 9_849_00),
+        val('silver', '2026-11', 0, 150_00),
+        val('old', '2026-11', 0, 1_00),
+      ],
+    )
+    const groups = [group('main', 9800, 0), group('silver', 200, 1), group('zero', 0, 2)]
+    const [main, silver, zero] = allocation(rows, groups).rows
+    expect(main).toMatchObject({ gapBps: 49, status: 'on' })
+    expect(silver).toMatchObject({ actualBps: 150, gapBps: -50, status: 'under' })
+    expect(zero).toMatchObject({ actualBps: 1, status: 'over' })
+  })
+
+  it('collects holdings with no group, or a deleted one, in a No group row', () => {
+    const rows = holdingRows(
+      [
+        holding('a', 'equity', { groupId: 'kept' }),
+        holding('b', 'equity'),
+        holding('c', 'equity', { groupId: 'gone' }),
+        holding('old', 'equity', { archived: true }),
+      ],
+      [
+        val('a', '2026-11', 0, 50_00),
+        val('b', '2026-11', 0, 30_00),
+        val('c', '2026-11', 0, 20_00),
+        val('old', '2026-11', 0, 999_00),
+      ],
+    )
+    const groups = [group('kept', 10000, 0), group('gone', 0, 1, { deletedAt: STAMP })]
+    const { rows: mix, total } = allocation(rows, groups)
+    expect(total).toBe(100_00)
+    expect(mix).toHaveLength(2)
+    expect(mix[1]).toMatchObject({ group: null, value: 50_00, actualBps: 5000, targetBps: null })
+    expect(mix[1]!.status).toBeNull()
+  })
+
+  it('leaves emergency money out of the mix', () => {
+    const rows = holdingRows(
+      [holding('a', 'equity', { groupId: 'g' }), holding('liquid', 'debt', { emergency: true })],
+      [val('a', '2026-11', 0, 100_00), val('liquid', '2026-11', 0, 900_00)],
+    )
+    const { rows: mix, total } = allocation(rows, [group('g', 10000, 0)])
+    expect(total).toBe(100_00)
+    expect(mix).toHaveLength(1)
+    expect(mix[0]).toMatchObject({ actualBps: 10000, status: 'on' })
+  })
+
+  it('has no percentages when there is nothing', () => {
+    const { rows } = allocation([], [group('a', 10000, 0)])
+    expect(rows.every((r) => r.actualBps === null && r.status === null)).toBe(true)
+  })
+
+  it('needs named, distinct groups whose targets add up to 100%', () => {
+    expect(allocationProblem([])).toBeNull()
+    expect(allocationProblem([{ name: 'Gold', target: 10000 }])).toBeNull()
+    expect(allocationProblem([{ name: ' ', target: 10000 }])).toMatch(/name/)
+    expect(
+      allocationProblem([
+        { name: 'Gold', target: 5000 },
+        { name: 'gold ', target: 5000 },
+      ]),
+    ).toMatch(/two groups/)
+    expect(allocationProblem([{ name: 'Gold', target: 9000 }])).toMatch(/100%/)
+  })
+})
+
+describe('classShareBps', () => {
   it('counts savings as cash and ignores archived holdings', () => {
     const rows = holdingRows(
       [holding('a', 'equity'), holding('old', 'equity', { archived: true })],
       [val('a', '2026-11', 0, 90_00), val('old', '2026-11', 0, 999_00)],
     )
-    const { rows: mix, total } = allocation(rows, 10_00, DEFAULT_TARGETS)
-    expect(total).toBe(100_00)
-    expect(mix.find((r) => r.assetClass === 'cash')?.value).toBe(10_00)
+    expect(classShareBps(rows, 10_00, 'equity')).toBe(9000)
+    expect(classShareBps(rows, 10_00, 'cash')).toBe(1000)
+    expect(classShareBps([], 0, 'equity')).toBeNull()
+  })
+})
+
+describe('groupsFromClassTargets', () => {
+  it('makes a group per class with a target or a holding', () => {
+    const groups = groupsFromClassTargets(
+      { equity: 7000, debt: 3000, gold: 0, cash: 0 },
+      [holding('btc', 'crypto'), holding('gone', 'other', { deletedAt: STAMP })],
+      STAMP,
+    )
+    expect(groups.map((g) => [g.id, g.name, g.target, g.order])).toEqual([
+      ['ag-equity', 'Equity', 7000, 0],
+      ['ag-debt', 'Debt', 3000, 1],
+      ['ag-crypto', 'Crypto', 0, 2],
+    ])
   })
 
-  it('has no percentages when there is nothing', () => {
-    const { rows } = allocation([], 0, DEFAULT_TARGETS)
-    expect(rows.every((r) => r.actualBps === null && r.status === null)).toBe(true)
+  it('uses the old defaults when targets were never saved, and makes nothing for an empty app', () => {
+    const groups = groupsFromClassTargets(undefined, [holding('a', 'equity')], STAMP)
+    expect(groups.map((g) => g.target)).toEqual([6000, 2500, 1000, 500])
+    expect(groupsFromClassTargets(undefined, [], STAMP)).toEqual([])
   })
 })
 

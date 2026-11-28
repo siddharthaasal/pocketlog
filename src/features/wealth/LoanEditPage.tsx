@@ -199,7 +199,7 @@ function LoanForm({ existing }: { existing: Loan | undefined }) {
               </Field>
               <Field label="Paid from" error={errors.accountId}>
                 <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-                  <option value="">—</option>
+                  <option value="">-</option>
                   {accounts
                     ?.filter((a) => !a.archived || a.id === accountId)
                     .map((a) => (

@@ -45,3 +45,29 @@ describe('transaction validation', () => {
     expect(errorsFor({ ...base, date: '02/11/2026' })).toHaveProperty('date')
   })
 })
+
+describe('split validation', () => {
+  const parts = (a: number, b: number, second = 'cat-home') => [
+    { categoryId: 'cat-food', amount: a },
+    { categoryId: second, amount: b },
+  ]
+  const split = (extra: object) => errorsFor({ ...base, ...extra })?.splits
+
+  it('accepts parts that add up, led by the category', () => {
+    expect(errorsFor({ ...base, splits: parts(30000, 5000) })).toBeNull()
+  })
+
+  it('rejects parts that do not hold together', () => {
+    expect(split({ splits: parts(30000, 4000) })).toMatch(/add up/)
+    expect(split({ splits: [{ categoryId: 'cat-food', amount: 35000 }] })).toMatch(/two parts/)
+    expect(split({ splits: parts(30000, 5000, 'cat-food') })).toMatch(/once/)
+    expect(split({ categoryId: 'cat-home', splits: parts(30000, 5000) })).toMatch(/first part/)
+    expect(split({ type: 'income', splits: parts(30000, 5000) })).toMatch(/Only expenses/)
+  })
+
+  it('keeps tags lowercase and short', () => {
+    const r = transactionInputSchema.parse({ ...base, tags: [' Goa Trip '] })
+    expect(r.tags).toEqual(['goa trip'])
+    expect(errorsFor({ ...base, tags: ['x'.repeat(31)] })).not.toBeNull()
+  })
+})

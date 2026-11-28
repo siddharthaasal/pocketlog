@@ -69,7 +69,7 @@ export function InsurancePage() {
           <Money paise={cover(['health'])} />
         </Stat>
         <Stat label="Next renewal" hint={next?.name}>
-          {next?.renewalDate ? formatShortDate(next.renewalDate) : '—'}
+          {next?.renewalDate ? formatShortDate(next.renewalDate) : '-'}
         </Stat>
       </div>
 
@@ -127,7 +127,7 @@ export function InsurancePage() {
                   </Td>
                   <Td className="max-w-0 text-muted">{p.insurer}</Td>
                   <Td className="text-right">
-                    {p.sumAssured ? <Money paise={p.sumAssured} /> : '—'}
+                    {p.sumAssured ? <Money paise={p.sumAssured} /> : '-'}
                   </Td>
                   <Td className="text-right">
                     <Money paise={p.premium} />
@@ -136,7 +136,7 @@ export function InsurancePage() {
                   <Td>
                     <span className="inline-flex items-center gap-2">
                       <span className="text-muted">
-                        {p.renewalDate ? formatShortDate(p.renewalDate, true) : '—'}
+                        {p.renewalDate ? formatShortDate(p.renewalDate, true) : '-'}
                       </span>
                       {tag && <Tag color={tag.color}>{tag.label}</Tag>}
                     </span>

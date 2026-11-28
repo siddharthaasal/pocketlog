@@ -4,7 +4,9 @@ export interface TransactionFilters {
   /** Matches every word against description, merchant and notes. */
   query?: string | undefined
   type?: TransactionType | undefined
+  /** Also matches an expense split that has a part in this category. */
   categoryId?: string | undefined
+  tag?: string | undefined
   /** Matches either side of a transfer. */
   accountId?: string | undefined
   /** Inclusive 'YYYY-MM-DD' bounds. */
@@ -24,7 +26,13 @@ export function filterTransactions(
   return transactions.filter((t) => {
     if (t.deletedAt) return false
     if (filters.type && t.type !== filters.type) return false
-    if (filters.categoryId && t.categoryId !== filters.categoryId) return false
+    if (
+      filters.categoryId &&
+      t.categoryId !== filters.categoryId &&
+      !t.splits?.some((p) => p.categoryId === filters.categoryId)
+    )
+      return false
+    if (filters.tag && !t.tags?.includes(filters.tag)) return false
     if (
       filters.accountId &&
       t.accountId !== filters.accountId &&
@@ -34,7 +42,9 @@ export function filterTransactions(
     if (filters.from && t.date < filters.from) return false
     if (filters.to && t.date > filters.to) return false
     if (words.length > 0) {
-      const haystack = [t.description, t.merchant, t.notes].join(' ').toLowerCase()
+      const haystack = [t.description, t.merchant, t.notes, ...(t.tags ?? [])]
+        .join(' ')
+        .toLowerCase()
       if (!words.every((w) => haystack.includes(w))) return false
     }
     return true

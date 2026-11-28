@@ -77,8 +77,8 @@ describe('parseEmailSweep', () => {
   })
 
   it('reads a merchant that contains a colon, quote or unicode', () => {
-    expect(ok('2026-11-27 | 10 | Café “Chai” — चाय | mid=1').rows[0]!.narration).toBe(
-      'Café “Chai” — चाय',
+    expect(ok('2026-11-27 | 10 | Café “Chai” - चाय | mid=1').rows[0]!.narration).toBe(
+      'Café “Chai” - चाय',
     )
   })
 })

@@ -84,3 +84,30 @@ describe('sortTransactions', () => {
     expect(input).toEqual([atm, lunch])
   })
 })
+
+describe('tags and splits', () => {
+  const split = makeTransaction({
+    id: 'split',
+    amount: 1000_00,
+    categoryId: 'cat-groceries',
+    splits: [
+      { categoryId: 'cat-groceries', amount: 600_00 },
+      { categoryId: 'cat-home', amount: 400_00 },
+    ],
+    tags: ['goa trip'],
+  })
+  const plain = makeTransaction({ id: 'plain', categoryId: 'cat-home', description: 'Bulb' })
+
+  it('finds a split by any of its categories', () => {
+    const ids = (f: object) => filterTransactions([split, plain], f).map((t) => t.id)
+    expect(ids({ categoryId: 'cat-home' })).toEqual(['split', 'plain'])
+    expect(ids({ categoryId: 'cat-groceries' })).toEqual(['split'])
+  })
+
+  it('filters by tag, and search matches tags too', () => {
+    expect(filterTransactions([split, plain], { tag: 'goa trip' }).map((t) => t.id)).toEqual([
+      'split',
+    ])
+    expect(filterTransactions([split, plain], { query: 'goa' }).map((t) => t.id)).toEqual(['split'])
+  })
+})

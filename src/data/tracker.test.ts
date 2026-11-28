@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { readBackupText } from '../domain/backup'
+import { BACKUP_FORMAT, readBackupText } from '../domain/backup'
 import { ValidationError } from '../domain/errors'
 import { holdingSchema, valuationSchema } from '../domain/types'
 import { applyMerge, collectData, deleteAllData, exportBackupText } from './backup'
@@ -17,9 +17,17 @@ import { suggestRecurring } from '../domain/recurring'
 import { markRenewed, savePolicy } from './policies'
 import { reopenMonth, saveSnapshot } from './networth'
 import { emptyLines } from '../domain/networth'
-import { saveHolding, saveValuations, setHoldingArchived } from './investments'
+import {
+  saveAllocation,
+  saveHolding,
+  saveValuations,
+  setHoldingArchived,
+  setHoldingGroup,
+} from './investments'
 import { monthRowId, removeRecord, saveAccountBalance, saveRecord } from './records'
 import { addTransaction, updateTransaction } from './repo'
+import { saveHoldingImport } from './holdingImport'
+import { matchHoldings } from '../domain/holdingImport'
 
 const lunch = {
   type: 'expense' as const,
@@ -175,17 +183,21 @@ describe('backup with the finance tables', () => {
       monthRowId('val', holding.id, '2026-11'),
     )
     await saveAccountBalance('acc-hdfc', '2026-11-30', 1000, 'manual')
+    await saveAllocation([{ name: 'Nifty 50', target: 10000 }])
 
     const result = await readBackupText(await exportBackupText())
     if (result.status !== 'ok') throw new Error(result.status)
     expect(result.invalid).toEqual([])
-    expect(result.backup.format).toBe(2)
+    expect(result.backup.format).toBe(BACKUP_FORMAT)
+    // The file says what kind of device made it (jsdom/node here, so not a phone or a Mac).
+    expect(result.backup.device).toEqual(expect.any(String))
 
     await deleteAllData()
     const plan = await applyMerge(result.backup.data)
     expect(plan.counts.holdings.added).toBe(1)
     expect(plan.counts.valuations.added).toBe(1)
     expect(plan.counts.accountBalances.added).toBe(1)
+    expect(plan.counts.allocationGroups.added).toBe(1)
     const data = await collectData()
     expect(data.holdings).toHaveLength(1)
     expect(data.valuations).toHaveLength(1)
@@ -224,6 +236,44 @@ describe('upgrading an existing database', () => {
     await upgraded.open()
     expect(await upgraded.transactions.get('t1')).toMatchObject({ amount: 100 })
     expect(await upgraded.holdings.count()).toBe(0)
+    expect(await upgraded.allocationGroups.count()).toBe(0)
+    await upgraded.delete()
+  })
+
+  it('turns version 2 class targets into groups and puts holdings in them', async () => {
+    const name = 'legacy-targets'
+    await Dexie.delete(name)
+    const old = new Dexie(name)
+    old.version(2).stores({
+      transactions: 'id, date',
+      categories: 'id',
+      accounts: 'id',
+      inbox: 'key',
+      meta: 'key',
+      holdings: 'id, kind, updatedAt',
+    })
+    const stamp = '2026-11-01T00:00:00.000Z'
+    const base = { kind: 'mutual_fund', archived: false, createdAt: stamp, updatedAt: stamp }
+    await old.table('holdings').bulkPut([
+      { ...base, id: 'h1', name: 'Nifty', assetClass: 'equity' },
+      { ...base, id: 'h2', name: 'BTC', assetClass: 'crypto' },
+    ])
+    await old.table('meta').put({ key: 'allocation.targets', value: { equity: 9000, debt: 1000 } })
+    old.close()
+
+    const upgraded = createDatabase(name)
+    await upgraded.open()
+    const groups = (await upgraded.allocationGroups.toArray()).sort((a, b) => a.order - b.order)
+    expect(groups.map((g) => [g.name, g.target])).toEqual([
+      ['Equity', 9000],
+      ['Debt', 1000],
+      ['Gold', 1000],
+      ['Cash', 500],
+      ['Crypto', 0],
+    ])
+    expect((await upgraded.holdings.get('h1'))?.groupId).toBe('ag-equity')
+    expect((await upgraded.holdings.get('h2'))?.groupId).toBe('ag-crypto')
+    expect(await upgraded.meta.get('allocation.targets')).toBeUndefined()
     await upgraded.delete()
   })
 })
@@ -239,6 +289,83 @@ describe('investments data', () => {
     await saveValuations('2026-11', [{ holdingId: a.id, invested: 100, value: 130 }])
     expect(await db.valuations.count()).toBe(2)
     expect((await db.valuations.get(monthRowId('val', a.id, '2026-11')))?.value).toBe(130)
+  })
+
+  it('saves the allocation table in order and deletes groups left out', async () => {
+    await saveAllocation([
+      { name: 'Nifty 50', target: 6000 },
+      { name: 'Gold', target: 4000 },
+    ])
+    const [nifty, gold] = (await db.allocationGroups.toArray()).sort((a, b) => a.order - b.order)
+    const h = await saveHolding({ name: 'SGB', kind: 'gold', assetClass: 'gold' })
+    await setHoldingGroup(h.id, gold!.id)
+
+    await saveAllocation([
+      { name: 'Silver', target: 2000 },
+      { id: nifty!.id, name: 'Nifty 50', target: 8000 },
+    ])
+    const live = (await db.allocationGroups.toArray()).filter((g) => !g.deletedAt)
+    expect(live.sort((a, b) => a.order - b.order).map((g) => [g.name, g.target])).toEqual([
+      ['Silver', 2000],
+      ['Nifty 50', 8000],
+    ])
+    expect((await db.allocationGroups.get(gold!.id))?.deletedAt).toBeDefined()
+
+    expect((await setHoldingGroup(h.id, undefined)).groupId).toBeUndefined()
+    await expect(saveAllocation([{ name: 'Gold', target: 5000 }])).rejects.toThrow(/100%/)
+  })
+
+  it('imports a report: new holdings, links, and one value per month', async () => {
+    const mine = await saveHolding({
+      name: 'UTI Nifty 50',
+      kind: 'mutual_fund',
+      assetClass: 'equity',
+    })
+    const nifty = {
+      name: 'UTI Nifty 50 Index Fund Direct Growth',
+      folio: '4242',
+      units: 100,
+      invested: 10000_00,
+      value: 11000_00,
+      kind: 'mutual_fund' as const,
+      assetClass: 'equity' as const,
+    }
+    const silver = {
+      name: 'NIPPONAMC - NETFSILVER',
+      isin: 'INF204KC1402',
+      units: 10,
+      invested: 2000_00,
+      value: 1500_00,
+      kind: 'etf' as const,
+      assetClass: 'other' as const,
+    }
+    const result = await saveHoldingImport([
+      { row: nifty, month: '2026-11', target: mine.id },
+      { row: silver, month: '2026-11', target: 'new' },
+      {
+        row: { ...silver, name: 'Skipped', isin: 'INE000000001' },
+        month: '2026-11',
+        target: 'skip',
+      },
+    ])
+    expect(result).toEqual({ created: 1, saved: 2 })
+    expect(await db.holdings.get(mine.id)).toMatchObject({ name: 'UTI Nifty 50', folio: '4242' })
+    const created = (await db.holdings.toArray()).find((h) => h.isin === 'INF204KC1402')
+    expect(created).toMatchObject({ kind: 'etf', platform: 'Groww', archived: false })
+    expect(await db.valuations.get(monthRowId('val', mine.id, '2026-11'))).toMatchObject({
+      invested: 10000_00,
+      value: 11000_00,
+    })
+
+    // Next month's report finds both holdings by folio and ISIN, without asking.
+    const holdings = await db.holdings.toArray()
+    expect(matchHoldings([nifty, silver], holdings).map((m) => m && [m.holding.id, m.by])).toEqual([
+      [mine.id, 'id'],
+      [created!.id, 'id'],
+    ])
+    // Saving the same month again replaces the value rather than adding one.
+    await saveHoldingImport([{ row: { ...nifty, value: 1 }, month: '2026-11', target: mine.id }])
+    expect(await db.valuations.count()).toBe(2)
   })
 
   it('archives and restores a holding', async () => {

@@ -79,7 +79,7 @@ export function SubscriptionsPage() {
   const next = subscriptions
     .filter((s) => s.status !== 'cancelled' && s.nextRenewal && s.nextRenewal >= today)
     .sort((a, b) => a.nextRenewal!.localeCompare(b.nextRenewal!))[0]
-  const accountName = (id: string | undefined) => accounts.find((a) => a.id === id)?.name ?? '—'
+  const accountName = (id: string | undefined) => accounts.find((a) => a.id === id)?.name ?? '-'
 
   return (
     <WealthShell
@@ -110,7 +110,7 @@ export function SubscriptionsPage() {
           <Money paise={totals.cancelPerMonth} />
         </Stat>
         <Stat label="Next renewal" hint={next ? next.service : undefined}>
-          {next ? formatShortDate(next.nextRenewal!) : '—'}
+          {next ? formatShortDate(next.nextRenewal!) : '-'}
         </Stat>
       </div>
 
@@ -232,7 +232,7 @@ export function SubscriptionsPage() {
                   <Money paise={perYear(s.cost, s.billing)} />
                 </Td>
                 <Td className="text-muted">
-                  {s.nextRenewal && s.status !== 'cancelled' ? formatShortDate(s.nextRenewal) : '—'}
+                  {s.nextRenewal && s.status !== 'cancelled' ? formatShortDate(s.nextRenewal) : '-'}
                 </Td>
                 <Td className="max-w-0 text-muted">{accountName(s.accountId)}</Td>
                 <Td className="overflow-visible" onClick={(e) => e.stopPropagation()}>

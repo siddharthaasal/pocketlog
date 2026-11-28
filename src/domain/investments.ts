@@ -1,7 +1,9 @@
 import { monthBounds, shiftMonth } from '../lib/dates'
 import {
   ASSET_CLASSES,
+  ASSET_CLASS_LABELS,
   type Account,
+  type AllocationGroup,
   type AssetClass,
   type Holding,
   type Transaction,
@@ -87,69 +89,158 @@ export function totalRows(rows: readonly HoldingRow[]): Totals {
 
 // ---------- Allocation ----------
 
-/** Basis points per asset class; they should add to 10000. */
-export type Targets = Record<AssetClass, number>
-
-export const DEFAULT_TARGETS: Targets = {
-  equity: 6000,
-  debt: 2500,
-  gold: 1000,
-  cash: 500,
-  crypto: 0,
-  real_estate: 0,
-  other: 0,
-}
-
 export interface AllocationRow {
-  assetClass: AssetClass
+  /** Null for the row that collects holdings in no group. */
+  group: AllocationGroup | null
   value: number
   /** Share of the total in basis points, or null when there is nothing to share. */
   actualBps: number | null
-  targetBps: number
+  /** Null for the No group row, which has no target. */
+  targetBps: number | null
   /** actual − target, in basis points. */
   gapBps: number | null
   status: 'over' | 'under' | 'on' | null
 }
 
-/** A class is flagged once it is this many basis points away from its target. */
+/** A group is flagged once it is this many basis points away from its target, at most. */
 export const ALLOCATION_TOLERANCE_BPS = 200
 
 /**
- * Actual mix against targets. `cash` is money in savings accounts, which counts as the Cash class.
- * Property and money lent are left to the caller: only pass what should count as invested.
+ * How far a group may drift before it is flagged: 2 points, or a fifth of its target when that
+ * is less, so a 2% target is not "on target" while empty. A 0% group is flagged once it holds anything.
+ */
+export const allowedGap = (targetBps: number, most = ALLOCATION_TOLERANCE_BPS) =>
+  Math.min(most, Math.round(targetBps / 5))
+
+/** Groups that aren't deleted, in table order. */
+export function liveGroups(groups: readonly AllocationGroup[]): AllocationGroup[] {
+  return groups
+    .filter((g) => !g.deletedAt)
+    .sort((a, b) => a.order - b.order || a.createdAt.localeCompare(b.createdAt))
+}
+
+/**
+ * Actual mix against your groups' targets. Holdings with no group, or whose group was deleted,
+ * share one "No group" row (only when they are worth something) and still count in the total.
+ * Emergency money isn't part of the mix at all.
  */
 export function allocation(
   rows: readonly HoldingRow[],
-  cash: number,
-  targets: Targets,
+  groups: readonly AllocationGroup[],
   tolerance = ALLOCATION_TOLERANCE_BPS,
 ): { rows: AllocationRow[]; total: number } {
-  const byClass = new Map<AssetClass, number>(ASSET_CLASSES.map((c) => [c, 0]))
+  const live = liveGroups(groups)
+  const byGroup = new Map<string, number>(live.map((g) => [g.id, 0]))
+  let ungrouped = 0
   for (const r of rows) {
-    if (r.holding.archived) continue
-    byClass.set(r.holding.assetClass, (byClass.get(r.holding.assetClass) ?? 0) + r.value)
+    if (r.holding.archived || r.holding.emergency) continue
+    const id = r.holding.groupId
+    if (id !== undefined && byGroup.has(id)) byGroup.set(id, byGroup.get(id)! + r.value)
+    else ungrouped += r.value
   }
-  byClass.set('cash', (byClass.get('cash') ?? 0) + Math.max(0, cash))
-  const total = [...byClass.values()].reduce((a, b) => a + b, 0)
+  const total = [...byGroup.values()].reduce((a, b) => a + b, ungrouped)
+  const share = (value: number) => (total === 0 ? null : Math.round((value / total) * 10000))
 
-  return {
-    total,
-    rows: ASSET_CLASSES.map((assetClass) => {
-      const value = byClass.get(assetClass) ?? 0
-      const targetBps = targets[assetClass] ?? 0
-      if (total === 0) {
-        return { assetClass, value, actualBps: null, targetBps, gapBps: null, status: null }
-      }
-      const actualBps = Math.round((value / total) * 10000)
-      const gapBps = actualBps - targetBps
-      const status = gapBps > tolerance ? 'over' : gapBps < -tolerance ? 'under' : 'on'
-      return { assetClass, value, actualBps, targetBps, gapBps, status }
-    }),
+  const out: AllocationRow[] = live.map((group) => {
+    const value = byGroup.get(group.id) ?? 0
+    const actualBps = share(value)
+    if (actualBps === null) {
+      return { group, value, actualBps, targetBps: group.target, gapBps: null, status: null }
+    }
+    const gapBps = actualBps - group.target
+    const allowed = allowedGap(group.target, tolerance)
+    const status = gapBps > allowed ? 'over' : gapBps < -allowed ? 'under' : 'on'
+    return { group, value, actualBps, targetBps: group.target, gapBps, status }
+  })
+  if (ungrouped > 0) {
+    out.push({
+      group: null,
+      value: ungrouped,
+      actualBps: share(ungrouped),
+      targetBps: null,
+      gapBps: null,
+      status: null,
+    })
   }
+  return { rows: out, total }
 }
 
-export const targetsTotal = (targets: Targets) =>
-  ASSET_CLASSES.reduce((sum, c) => sum + (targets[c] ?? 0), 0)
+export const groupTargetsTotal = (groups: readonly AllocationGroup[]) =>
+  liveGroups(groups).reduce((sum, g) => sum + g.target, 0)
+
+export interface GroupDraft {
+  /** Missing for a group added in this edit. */
+  id?: string
+  name: string
+  /** Basis points. */
+  target: number
+}
+
+/** Why an edited Allocation table can't be saved, or null when it can. */
+export function allocationProblem(drafts: readonly GroupDraft[]): string | null {
+  const names = new Set<string>()
+  for (const d of drafts) {
+    const name = d.name.trim().toLowerCase()
+    if (!name) return 'Give every group a name.'
+    if (names.has(name)) return `There are two groups called “${d.name.trim()}”.`
+    names.add(name)
+  }
+  const total = drafts.reduce((sum, d) => sum + d.target, 0)
+  if (drafts.length > 0 && total !== 10000) return 'Targets must add up to 100%.'
+  return null
+}
+
+/** Share of investments plus savings held in one asset class, or null when there is nothing. */
+export function classShareBps(
+  rows: readonly HoldingRow[],
+  cash: number,
+  assetClass: AssetClass,
+): number | null {
+  const active = rows.filter((r) => !r.holding.archived)
+  const savings = Math.max(0, cash)
+  const total = active.reduce((sum, r) => sum + r.value, savings)
+  if (total === 0) return null
+  const inClass = active
+    .filter((r) => r.holding.assetClass === assetClass)
+    .reduce((sum, r) => sum + r.value, assetClass === 'cash' ? savings : 0)
+  return Math.round((inClass / total) * 10000)
+}
+
+/** Version 2 kept one target per asset class in `meta` under this key, with these defaults. */
+export const LEGACY_TARGETS_KEY = 'allocation.targets'
+const LEGACY_DEFAULT_TARGETS: Partial<Record<AssetClass, number>> = {
+  equity: 6000,
+  debt: 2500,
+  gold: 1000,
+  cash: 500,
+}
+
+/** Fixed per class, so two devices that upgrade separately make the same groups. */
+export const classGroupId = (assetClass: AssetClass) => `ag-${assetClass}`
+
+/**
+ * Turns the version 2 per-class targets into groups, one per class that had a target or a
+ * holding, so the Allocation table reads the same after the upgrade. Holdings then join the
+ * group of their class (`classGroupId`). Nothing is made when there is nothing to carry over.
+ */
+export function groupsFromClassTargets(
+  saved: Partial<Record<AssetClass, number>> | undefined,
+  holdings: readonly Holding[],
+  now: string,
+): AllocationGroup[] {
+  const alive = holdings.filter((h) => !h.deletedAt)
+  if (!saved && alive.length === 0) return []
+  const targets = { ...LEGACY_DEFAULT_TARGETS, ...saved }
+  const held = new Set(alive.map((h) => h.assetClass))
+  return ASSET_CLASSES.filter((c) => (targets[c] ?? 0) > 0 || held.has(c)).map((c, order) => ({
+    id: classGroupId(c),
+    createdAt: now,
+    updatedAt: now,
+    name: ASSET_CLASS_LABELS[c],
+    target: targets[c] ?? 0,
+    order,
+  }))
+}
 
 // ---------- Returns ----------
 

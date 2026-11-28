@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useLocation } from 'wouter'
 import {
   CalendarGlyph,
+  CellInput,
   NumberGlyph,
   SelectGlyph,
   Table,
@@ -11,7 +12,7 @@ import {
   Th,
   Tr,
 } from '../../components/table'
-import { Button, EmptyState, Loading, Money, TextInput } from '../../components/ui'
+import { Button, EmptyState, Loading, Money } from '../../components/ui'
 import { useAllTransactions, useLoanBalances, useLoans } from '../../data/hooks'
 import { saveLoanBalances } from '../../data/loans'
 import {
@@ -246,27 +247,27 @@ function LoansTable({
                     {LOAN_KIND_LABELS[r.loan.kind]}
                   </Tag>
                 </Td>
-                <Td className="max-w-0 text-muted">{r.loan.party ?? '—'}</Td>
-                <Td className="text-right">{r.loan.emi ? <Money paise={r.loan.emi} /> : '—'}</Td>
-                <Td className="text-right">{r.loan.rate ? bpsText(r.loan.rate) : '—'}</Td>
+                <Td className="max-w-0 text-muted">{r.loan.party ?? '-'}</Td>
+                <Td className="text-right">{r.loan.emi ? <Money paise={r.loan.emi} /> : '-'}</Td>
+                <Td className="text-right">{r.loan.rate ? bpsText(r.loan.rate) : '-'}</Td>
                 <Td className="text-right">
                   {edit ? (
-                    <TextInput
+                    <CellInput
                       inputMode="decimal"
                       aria-label={`Outstanding on ${r.loan.name}`}
                       value={drafts[r.loan.id] ?? ''}
                       onChange={(e) => setDrafts((d) => ({ ...d, [r.loan.id]: e.target.value }))}
-                      className="h-7! py-0! text-right text-[14px]"
+                      className="text-right"
                     />
                   ) : r.outstanding === null ? (
-                    '—'
+                    '-'
                   ) : (
                     <Money paise={r.outstanding} />
                   )}
                 </Td>
                 <Td>
                   {r.repaid === null ? (
-                    <span className="text-muted">—</span>
+                    <span className="text-muted">-</span>
                   ) : (
                     <span className="flex items-center gap-2">
                       <span className="h-1.5 w-12 overflow-hidden rounded-full bg-surface-2">
@@ -283,7 +284,7 @@ function LoansTable({
                 </Td>
                 <Td className="text-muted">
                   {left === null
-                    ? '—'
+                    ? '-'
                     : left === 0
                       ? 'Due'
                       : left >= 12
